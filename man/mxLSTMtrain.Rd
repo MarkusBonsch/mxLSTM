@@ -5,7 +5,7 @@
 \title{mxLSTMtrain
 #' @param model mxSymbol as returned by mxLSTMcreate}
 \usage{
-mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.rounds,
+mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds,
   optimizer = "rmsprop", initializer = mx.init.Xavier(),
   initialModel = NULL, shuffle = TRUE, epoch.end.callback = NULL, ...)
 }
@@ -19,6 +19,8 @@ mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.rounds,
 \item{symbol}{mxSymbol as returned by \code{\link{mxLSTMcreate}}}
 
 \item{batchSize}{see \code{\link{mxLSTM}}}
+
+\item{num.hidden}{see \code{\link{mxLSTM}}}
 
 \item{num.rounds}{see num.epoch argument in \code{\link{mxLSTM}}}
 

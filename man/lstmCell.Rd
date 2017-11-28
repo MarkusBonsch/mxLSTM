@@ -5,7 +5,7 @@
 \title{lstmCell}
 \usage{
 lstmCell(num.hidden, indata, prev.state, param, seqidx, layeridx, dropout = 0,
-  batchNorm = FALSE, activation = "relu")
+  zoneout = 0, batchNorm = FALSE, activation = "relu")
 }
 \arguments{
 \item{num.hidden}{number of hidden neurons in the cell's state}
@@ -20,7 +20,9 @@ lstmCell(num.hidden, indata, prev.state, param, seqidx, layeridx, dropout = 0,
 
 \item{layeridx}{index for the layer that the cell belongs to}
 
-\item{dropout}{if > 0, dropout is aplpied on the inputs before entering the cell.}
+\item{dropout}{see \code{\link{mxLSTM}}}
+
+\item{zoneout}{see \code{\link{mxLSTM}}}
 
 \item{batchNorm}{see \code{\link{mxLSTM}}}
 

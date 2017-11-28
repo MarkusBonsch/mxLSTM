@@ -16,12 +16,16 @@
 #'            Use \code{\link{transformLSTMinput}} to transform data.frames into this structure.
 #' @param test.x same as x, but for testing, not for training
 #' @param test.y same as y but for testing, not for training
-#' @param num.epoch integer number of training epochs over ful ldataset
+#' @param num.epoch integer number of training epochs over full ldataset
 #' @param num.hidden integer vector of flexible length. For each entry, an LSTM layer is with the corresponding number of
 #'                   neurons is created.
 #' @param dropoutLstm    numeric vector of same length as num.hidden. Specifies the dropout probability for each LSTM layer.
 #'                       Dropout is applied according to Cheng et al. "An exploration of dropout with LSTMs". 
 #'                       Difference: we employ a constant dropout rate; we do per element dropout.
+#' @param zoneoutLstm    numeric vector of same length as num.hidden. Specifies the zoneout probability for each LSTM layer.
+#'                       Zoneout is implemented according to 
+#'                       Krueger et al. 2017 "Zoneout: Regularizing RNNs by randomly preserving hidden activations". 
+#'                       
 #' @param batchNormLstm  logical. If TRUE, each LSTM layer is batch normalized according to the recommendations in
 #'                      T. Cooljmans et al. ILRC 2017 "Recurrent batch normalization".
 #' @param batch.size self explanatory
@@ -38,12 +42,13 @@
 #'          \code{\link{plot_trainHistory}}
 #' @import mxnet
 #' @export mxLSTM
-mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dropoutLstm = num.hidden * 0, 
-                   batchNormLstm = FALSE, batch.size = 128, activation = "relu", optimizer = "rmsprop", 
+mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dropoutLstm = num.hidden * 0,
+                   zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, batch.size = 128, activation = "relu", optimizer = "rmsprop", 
                    initializer = mx.init.Xavier(), shuffle = TRUE, initialModel = NULL, ...){
   
   
   if(!all(dim(x)[2:3] == dim(y))) stop("x and y don't fit together.")
+  if(any(dropoutLstm * zoneoutLstm != 0)) stop("dropout and zoneout are mutually exclusive. Please adapt arguments 'dropoutLSTM' or 'zoneoutLSTM")
   
   seq.length <- dim(x)[2]
   
@@ -67,7 +72,8 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
   ## raw symbol
   model <- mxLSTMcreate(seq.length = seq.length, 
                         num.hidden = num.hidden, 
-                        dropoutLstm    = dropoutLstm, 
+                        dropoutLstm   = dropoutLstm, 
+                        zoneoutLstm   = zoneoutLstm,
                         batchNormLstm = batchNormLstm,
                         batch.size = batch.size, 
                         activation = activation)
@@ -115,21 +121,27 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
 #' @param seq.length see \code{\link{mxLSTM}}
 #' @param num.hidden see \code{\link{mxLSTM}}
 #' @param dropoutLstm see \code{\link{mxLSTM}}
+#' @param zoneoutLstm see \code{\link{mxLSTM}}
 #' @param batchNormLstm see \code{\link{mxLSTM}}
 #' @param batch.size see \code{\link{mxLSTM}}
 #' @param activation see \code{\link{mxLSTM}}
 #' @return MXSymbol 
 
-mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0,batchNormLstm = FALSE, 
+mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE, 
                          batch.size = 128, activation = "relu"){
   
   if(any(num.hidden <=0)) stop("num.hidden must consist of positive numbers")
   
   if(any(dropoutLstm < 0 | dropoutLstm >=1)) stop("dropout must be in [0;1)")
   
-  if(length(num.hidden) != length(dropoutLstm)){
-    stop("num.hidden and dropout must be vectors of identical length")
+  if(any(zoneoutLstm < 0 | zoneoutLstm >=1)) stop("zoneout must be in [0;1)")
+  
+  if(length(num.hidden) != length(dropoutLstm) |
+     length(num.hidden) != length(zoneoutLstm)){
+    stop("num.hidden, zoneout, and dropout must be vectors of identical length")
   }
+
+  if(any(dropoutLstm * zoneoutLstm != 0)) stop("dropout and zoneout are mutually exclusive. Please adapt arguments 'dropoutLSTM' or 'zoneoutLSTM")
   
   num.lstm.layer <- length(num.hidden)
   
@@ -200,6 +212,7 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0,batchNormLstm =
                             seqidx = elem, ## only for bookkeeping
                             layeridx = layer, ## only for bookkeeping
                             dropout = dropoutLstm[layer],
+                            zoneout = zoneoutLstm[layer],
                             batchNorm = batchNormLstm,
                             activation = activation)
       
@@ -527,12 +540,13 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
 #' @param param list of variables with weights and biases. must contain elements i2h.weight, i2h.bias, h2h.weight, h2h.bias
 #' @param seqidx sequence index. Purely bookkeeping
 #' @param layeridx index for the layer that the cell belongs to
-#' @param dropout if > 0, dropout is aplpied on the inputs before entering the cell.
+#' @param dropout see \code{\link{mxLSTM}}
+#' @param zoneout see \code{\link{mxLSTM}}
 #' @param batchNorm see \code{\link{mxLSTM}}
 #' @param activation activation function for update layers. "relu" or "tanh"
 #' @return mxSymbol
 lstmCell <- function (num.hidden, indata, prev.state, param, seqidx, layeridx, 
-                      dropout = 0, batchNorm = FALSE, activation = "relu") 
+                      dropout = 0, zoneout = 0, batchNorm = FALSE, activation = "relu") 
 {
 
   i2h <- mx.symbol.FullyConnected(data = indata, weight = param$i2h.weight, 
@@ -572,6 +586,7 @@ lstmCell <- function (num.hidden, indata, prev.state, param, seqidx, layeridx,
   if(dropout > 0) forget.gate <- mx.symbol.Dropout(data = forget.gate, p = dropout)
   out.gate <- mx.symbol.Activation(slice.gates[[4]], act.type = "sigmoid")
   if(dropout > 0) out.gate <- mx.symbol.Dropout(data = out.gate, p = dropout)
+  
   next.c <- (forget.gate * prev.state$c) + (in.gate * in.transform)
   if(!batchNorm){
     next.h <- out.gate * mx.symbol.Activation(next.c, act.type = activation)
@@ -584,5 +599,36 @@ lstmCell <- function (num.hidden, indata, prev.state, param, seqidx, layeridx,
                                        name = paste0("t", seqidx, ".l", layeridx, ".c.batchNorm"))
     next.h <- out.gate * mx.symbol.Activation(next.cNorm, act.type = activation)
   }
+  
+  if(zoneout > 0){
+    next.c <- zoneout(thisState = next.c, prevState = prev.state$c, p = zoneout)
+    next.h <- zoneout(thisState = next.h, prevState = prev.state$h, p = zoneout)
+  }
+  
   return(list(c = next.c, h = next.h))
+}
+
+#' @title zoneout
+#' @description Applies zoneout as described in Krueger et al. 2017
+#' @param thisState the current state (mx.symbol)
+#' @param prevState the state from the previous sequence (mx.symbol). 
+#' @param p zoneout probability in (0;1]. Rounded to 6 digits
+#' @return During training: out(t) = x(t) * thisState(t) + (1 - x(t)) * prevState(t). 
+#'         x(t) is a 0/1 mask for each element t with the probability p of being 0.
+#'         During application: out(t) = (1 - p) * thisState(t) + p * prevState(t)
+
+zoneout <- function(thisState, prevState, p){
+  
+  if(!"Rcpp_MXSymbol" %in% class(thisState)) stop("thisState must be an Rcpp_MXSymbol")
+  if(!"Rcpp_MXSymbol" %in% class(prevState)) stop("prevState must be an Rcpp_MXSymbol")
+  if(length(p) != 1 | !is.numeric(p) | p < 0 |  p >= 1) stop("p must be a length 1 numeric vector in the interval (0;1]")
+
+  ## create a vector that is one after the 1/(1-p) transformation of mx.symbol.Dropout during training
+  ## during inference, it will simply contain values (1-p)
+  zoneoutVec  <- mx.symbol.ones_like(data = prevState, name = "zoneoutVec") * (1-p)
+  zoneoutMask <- mx.symbol.Dropout(data = zoneoutVec, p = p, mode = "training", name = "zoneoutMask")
+  
+  out <- thisState * zoneoutMask + prevState * (1-zoneoutMask)
+  
+  return(out)
 }

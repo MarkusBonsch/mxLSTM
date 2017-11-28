@@ -8,10 +8,10 @@
 \title{mxLSTM: A library facilitating regression analysis with LSTMs}
 \usage{
 mxLSTM(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden,
-  dropoutLstm = num.hidden * 0, batchNormLstm = FALSE, batch.size = 128,
-  activation = "relu", optimizer = "rmsprop",
-  initializer = mx.init.Xavier(), shuffle = TRUE, initialModel = NULL,
-  ...)
+  dropoutLstm = num.hidden * 0, zoneoutLstm = num.hidden * 0,
+  batchNormLstm = FALSE, batch.size = 128, activation = "relu",
+  optimizer = "rmsprop", initializer = mx.init.Xavier(), shuffle = TRUE,
+  initialModel = NULL, ...)
 }
 \arguments{
 \item{x}{array containing the features:
@@ -42,6 +42,10 @@ neurons is created.}
 \item{dropoutLstm}{numeric vector of same length as num.hidden. Specifies the dropout probability for each LSTM layer.
 Dropout is applied according to Cheng et al. "An exploration of dropout with LSTMs". 
 Difference: we employ a constant dropout rate; we do per element dropout.}
+
+\item{zoneoutLstm}{numeric vector of same length as num.hidden. Specifies the zoneout probability for each LSTM layer.
+Zoneout is implemented according to 
+Krueger et al. 2017 "Zoneout: Regularizing RNNs by randomly preserving hidden activations".}
 
 \item{batchNormLstm}{logical. If TRUE, each LSTM layer is batch normalized according to the recommendations in
 T. Cooljmans et al. ILRC 2017 "Recurrent batch normalization".}

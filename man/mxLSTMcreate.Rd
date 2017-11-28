@@ -19,6 +19,8 @@ mxLSTMcreate(seq.length, num.hidden, dropoutLstm = 0, batchNormLstm = FALSE,
 \item{batch.size}{see \code{\link{mxLSTM}}}
 
 \item{activation}{see \code{\link{mxLSTM}}}
+
+\item{zoneoutLstm}{see \code{\link{mxLSTM}}}
 }
 \value{
 MXSymbol
