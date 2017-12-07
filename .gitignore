@@ -1,0 +1,8 @@
+.Rproj.user
+.Rbuildignore
+.Rhistory
+*.Rproj
+*.swp
+inst/doc
+todo.txt
+*.out
