@@ -5,7 +5,7 @@
 \title{mxLSTMsetup}
 \usage{
 mxLSTMsetup(model, num.features, num.hidden, seq.length, batch.size,
-  initializer, initialModel = NULL)
+  initializer, initialModel = NULL, gammaInit)
 }
 \arguments{
 \item{model}{mxSymbol as returned by mxLSTMcreate}
@@ -21,6 +21,8 @@ mxLSTMsetup(model, num.features, num.hidden, seq.length, batch.size,
 \item{initializer}{see \code{\link{mxLSTM}}}
 
 \item{initialModel}{see \code{\link{mxLSTM}}}
+
+\item{gammaInit}{see \code{\link{mxLSTM}}}
 }
 \value{
 MXExecutor

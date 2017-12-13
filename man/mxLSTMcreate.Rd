@@ -4,8 +4,8 @@
 \alias{mxLSTMcreate}
 \title{mxLSTMcreate}
 \usage{
-mxLSTMcreate(seq.length, num.hidden, dropoutLstm = 0, batchNormLstm = FALSE,
-  batch.size = 128, activation = "relu")
+mxLSTMcreate(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 0,
+  batchNormLstm = FALSE, batch.size = 128, activation = "relu")
 }
 \arguments{
 \item{seq.length}{see \code{\link{mxLSTM}}}
@@ -14,13 +14,13 @@ mxLSTMcreate(seq.length, num.hidden, dropoutLstm = 0, batchNormLstm = FALSE,
 
 \item{dropoutLstm}{see \code{\link{mxLSTM}}}
 
+\item{zoneoutLstm}{see \code{\link{mxLSTM}}}
+
 \item{batchNormLstm}{see \code{\link{mxLSTM}}}
 
 \item{batch.size}{see \code{\link{mxLSTM}}}
 
 \item{activation}{see \code{\link{mxLSTM}}}
-
-\item{zoneoutLstm}{see \code{\link{mxLSTM}}}
 }
 \value{
 MXSymbol

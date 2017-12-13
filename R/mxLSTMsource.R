@@ -28,6 +28,9 @@
 #'                       
 #' @param batchNormLstm  logical. If TRUE, each LSTM layer is batch normalized according to the recommendations in
 #'                      T. Cooljmans et al. ILRC 2017 "Recurrent batch normalization".
+#' @param gammaInit numeric value. Will be used to initialize the gamma matrices of batchNormLayers. 
+#'                  Cooljmans et al. recommend 0.1 (for use with tanh activation), mxnet default is 1.
+#'                  My experience: 0.1 works very badly with relu activation.
 #' @param batch.size self explanatory
 #' @param activation activation function for update layers in the LSTM cells. "relu" or "tanh"
 #' @param optimizer character specifying the type of optimizer to use.
@@ -42,8 +45,38 @@
 #'          \code{\link{plot_trainHistory}}
 #' @import mxnet
 #' @export mxLSTM
+#' @examples 
+#'\dontrun{
+#' library(mxLSTM)
+#' library(data.table)
+#' 
+#' ## simple data: one numeric output as a function of two numeric inputs.
+#' ## including lag values
+#' ## with some noise.
+#' dat <- data.table(x = runif(n = 8000, min = 1000, max = 2000),
+#'                   y = runif(n = 8000, min = -10, max = 10))
+#' ## create target
+#' dat[, target := 0.5 * x + 0.7 * lag(y, 3) - 0.2 * lag(x, 5)]
+#' dat[, target := target + rnorm(8000, 0, 10)]
+#' ## convert to nxLSTM input
+#' dat <- transformLSTMinput(dat = dat, targetColumn = "target", seq.length = 5)
+#' 
+#' ## train model
+#' model <- mxLSTM(x = dat$x, y = dat$y, num.epoch = 10, num.hidden = 64, 
+#'                 dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE, batch.size = 128)
+#' 
+#' ## plot training history
+#' plot_trainHistory(model)
+#' 
+#' ## get some predictions (on training set)
+#' predTrain <- predictLSTMmodel(model = model, dat = dat$x, fullSequence = FALSE)
+#' 
+#' ## nice plot
+#' plot_goodnessOfFit(predicted = predTrain$y, observed = dat$y[5,])
+#' }
+
 mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dropoutLstm = num.hidden * 0,
-                   zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, batch.size = 128, activation = "relu", optimizer = "rmsprop", 
+                   zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, gammaInit = 0.1, batch.size = 128, activation = "relu", optimizer = "rmsprop", 
                    initializer = mx.init.Xavier(), shuffle = TRUE, initialModel = NULL, ...){
   
   
@@ -55,7 +88,7 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
   datTrain <- list(data  = x,
                    label = y)
   
-  if(nrow(test.x) > 0){
+  if(!is.null(test.x)){
     
     datEval <- list(data  = test.x,
                     label = test.y)
@@ -94,9 +127,10 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
                        num.hidden = num.hidden,
                        num.rounds = num.epoch, 
                        optimizer  = optimizer, 
-                       initializer=initializer,
+                       initializer =initializer,
                        initialModel=initialModel,
                        shuffle    = shuffle, 
+                       gammaInit  = gammaInit,
                        epoch.end.callback = mx.callback.log(period = 1, loggerEnv = thisLoggerEnv),
                        ...)
   
@@ -105,7 +139,7 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
   
   return(structure(list(symbol = model$symbol,
                         arg.params = model$arg.params,
-                        aux.params = model$aux.arrays,
+                        aux.params = model$aux.params,
                         log   = thisLoggerEnv$logger,
                         varNames = list(x = dimnames(x)[[1]],          ## remember variable names 
                                         y = unique(dimnames(y)[[2]]))) ## to order input at prediction
@@ -265,8 +299,9 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 
 #' @param batch.size see \code{\link{mxLSTM}}
 #' @param initializer see \code{\link{mxLSTM}}
 #' @param initialModel see \code{\link{mxLSTM}}
+#' @param gammaInit    see \code{\link{mxLSTM}}
 #' @return MXExecutor
-mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size, initializer, initialModel = NULL){
+mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size, initializer, initialModel = NULL, gammaInit){
   
   ## provide a list with known shapes of input arrays.
   ## This will help to estimate the weight dimensions.
@@ -313,7 +348,7 @@ mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size,
     ## by default, gamma of batchNorm layers are initialized to 1. However, Cheng et al. strongly recommend
     ## initializing to 0.1 Do that here.
     whichGamma <- grep("gamma", names(initValues$arg.params))
-    initValues$arg.params[whichGamma] <- lapply(initValues$arg.params[whichGamma], function(x) return(x / 10))
+    initValues$arg.params[whichGamma] <- lapply(initValues$arg.params[whichGamma], function(x) return(x * gammaInit))
     
   } else {
     
@@ -382,13 +417,14 @@ mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size,
 #' @param initializer see \code{\link{mxLSTM}}
 #' @param initialModel see \code{\link{mxLSTM}}
 #' @param shuffle see \code{\link{mxLSTM}}
+#' @param gammaInit see \code{\link{mxLSTM}}
 #' @param epoch.end.callback function to be called at the end of each epoch.
 #' @param ... further arguments passed to optimizer
 #' @return  object of class 'mxLSTM' 
 #'        list: 'model' is the actual symbol, 'arg.params' and 'aux.params' are the parameters,
 #'         'log' is the training log, 'optimizerEnv' is an optional environment with optimizer parameters.
 mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds, optimizer = "rmsprop", initializer = mx.init.Xavier(),
-                        initialModel = NULL, shuffle = TRUE, epoch.end.callback = NULL, ...){
+                        initialModel = NULL, shuffle = TRUE, gammaInit, epoch.end.callback = NULL, ...){
   
   seq.length   <- dim(datTrain$data)[2]
   batch.size   <- batchSize
@@ -401,16 +437,17 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
                         seq.length   = seq.length, 
                         batch.size   = batch.size, 
                         initializer  = initializer, 
-                        initialModel = initialModel)
+                        initialModel = initialModel,
+                        gammaInit    = gammaInit)
 
   init.states.name <- grep(".*\\.[ch]$", symbol$arguments, value = TRUE)
   
   ## prepare the input data iterators
-  trainIterator <- mxnet:::check.data(datTrain, batch.size, is.train = shuffle)
+  trainIterator <- mx.io.arrayiter(datTrain$data, datTrain$label, batch.size, shuffle = shuffle)
   
   if(!is.null(datEval)){
     
-    evalIterator  <- mxnet:::check.data(datEval, batch.size, is.train = FALSE)
+    evalIterator  <- mx.io.arrayiter(datEval$data, datEval$label, batch.size, shuffle = FALSE)
     
   } else {
     

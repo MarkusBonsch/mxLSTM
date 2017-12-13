@@ -5,7 +5,7 @@
 #' \code{\link[caret]{train}} logic. It behaves slightly different than the usual 
 #' caret models as retrieved by \code{\link[caret]{getModelInfo}}. See details.
 #' @details
-#' \strong{model setup\cr}{The model is an LSTM recurrent neural network model with rmsprop optimizer.\cr }
+#' \strong{model setup} \cr {The model is an LSTM recurrent neural network model with rmsprop optimizer.\cr }
 #' 
 #' \strong{Purpose}\cr 
 #' The purpose of the custom model is the following:
@@ -44,6 +44,7 @@
 #'                                            \item{\code{seqFreq}: frequency of sequence starts (in rows). 
 #'                                                                  If smaller than seqLength, sequences are overlapping}
 #'                                       }}
+#' }
 #'   
 #' \strong{Additional argumets to fit function:}
 #'       \itemize{
@@ -65,8 +66,8 @@
 #'                                                 
 #'                                               
 #' \item{Different prediction function}{For predicting from the model as returned by caret's \code{\link[caret]{train}},
-#'                                      you have to use the \code{\link{predictAll}}} function. This will call the internal
-#'                                      predict function of \code{getLSTMmodel} returning predictions for all y-variables.
+#'                                      you have to use the \code{\link{predictAll}} function. This will call the internal
+#'                                      predict function of \code{getLSTMmodel} returning predictions for all y-variables.}
 #'                                                 
 #' \strong{tuning parameters\cr}
 #'                        \itemize{
@@ -105,7 +106,104 @@
 #' \code{\link{predictPreProcessor}}, \code{\link{invertPreProcessor}}
 #' 
 #' @examples 
-#' \dontrun{
+#'\dontrun{
+#' library(caret)
+#' library(mxLSTM)
+#' library(mxnet)
+#' library(data.table)
+#' ###########################################################
+#' ## perform a regression with nxLSTM
+#' ## on dummy data
+#' 
+#' ## simple data: one numeric output as a function of two numeric inputs.
+#' ## including lag values
+#' ## with some noise.
+#' set.seed(200)
+#' mx.set.seed(200)
+#' dat <- data.table(x = runif(n = 8000, min = 1000, max = 2000),
+#'                   y = runif(n = 8000, min = -10, max = 10))
+#' ## create target
+#' dat[, target := 0.5 * x + 0.7 * lag(y, 3) - 0.2 * lag(x, 5)]
+#' 
+#' dat[, target := target + rnorm(8000, 0, 10)]
+#' 
+#' 
+#' ## convert to nxLSTM input
+#' dat <- transformLSTMinput(dat = dat, targetColumn = "target", seq.length = 5)
+#' 
+#' ## convert to caret input
+#' dat <- lstmInput2caret(dat)
+#' 
+#' ## split into train and test set
+#' datTrain <- dat[1:666,]
+#' datEval  <- dat[667:1334,]
+#' datTest  <- dat[1335:1600,]
+#' 
+#' ## define caret trainControl
+#' thisTrainControl  <- trainControl(method = "cv",
+#'                                   number = 2,
+#'                                   verboseIter = TRUE)
+#' 
+#' 
+#' ## do the training
+#' 
+#' ## grid for defining the parameters of the mxNet model
+#' lstmGrid <- expand.grid(layer1 = 64, layer2 = 0, layer3 = 0,
+#'                         learning.rate = 0.002, weight.decay = 0, dropout1 = 0, dropout2 = 0, dropout3 = 0,
+#'                         learningrate.momentum = 0.95,
+#'                         momentum = 0.1, num.epoch = 50,
+#'                         batch.size = 128, activation = "relu", shuffle = TRUE, stringsAsFactors = FALSE)
+#' 
+#' ## construct formula with all variables on rigth-hand-side
+#' form <- formula(paste0("dummy~", paste0(setdiff(names(train), "dummy"), collapse = "+")))
+#' 
+#' caret_lstm1 <- train(form = form,
+#'                      data = datTrain,
+#'                      testData = datEval,
+#'                      method = getLSTMmodel(), ## get our custom model
+#'                      xVariables = c("x", "y"), ## define predictors
+#'                      yVariables = c("target"), ## define outcomes
+#'                      preProcessX = c("pca", "scaleAgain", "centerAgain"),
+#'                      preProcessY = c("scale", "center"),
+#'                      debugModel = FALSE,
+#'                      trControl = thisTrainControl,
+#'                      tuneGrid = lstmGrid)
+#' 
+#' caret_lstm2 <- train(form = form,
+#'                      data = datTrain,
+#'                      testData = datEval,
+#'                      method = getLSTMmodel(), ## get our custom model
+#'                      xVariables = c("x", "y"), ## define predictors
+#'                      yVariables = c("target"), ## define outcomes
+#'                      preProcessX = c("pca", "scaleAgain", "centerAgain"),
+#'                      preProcessY = c("scale", "center"),
+#'                      debugModel = FALSE,
+#'                      trControl = thisTrainControl,
+#'                      tuneGrid = lstmGrid,
+#'                      batchNormLstm = TRUE,
+#'                      zoneoutLstm = 0.2)
+#' 
+#' ## get nice output of training history
+#' plot_trainHistory(caret_lstm1$finalModel)
+#' plot_trainHistory(caret_lstm2$finalModel)
+#' 
+#' ## get predictions for the datasets
+#' predTrain1 <- predictAll(caret_lstm1, newdata = datTrain, fullSequence = FALSE)
+#' predEval1  <- predictAll(caret_lstm1, newdata = datEval, fullSequence = FALSE)
+#' predTest1  <- predictAll(caret_lstm1, newdata = datTest, fullSequence = FALSE)
+#' 
+#' predTrain2 <- predictAll(caret_lstm1, newdata = datTrain, fullSequence = FALSE)
+#' predEval2  <- predictAll(caret_lstm2, newdata = datEval, fullSequence = FALSE)
+#' predTest2  <- predictAll(caret_lstm2, newdata = datTest, fullSequence = FALSE)
+#' 
+#' ## get nice goodness of fit plots.
+#' plot_goodnessOfFit(predicted = predTrain1$target, observed = datTrain$dummy)
+#' plot_goodnessOfFit(predicted = predEval1$target,  observed = datEval$dummy)
+#' plot_goodnessOfFit(predicted = predTest1$target,  observed = datTest$dummy)
+#' 
+#' plot_goodnessOfFit(predicted = predTrain2$target, observed = datTrain$dummy)
+#' plot_goodnessOfFit(predicted = predEval2$target,  observed = datEval$dummy)
+#' plot_goodnessOfFit(predicted = predTest2$target,  observed = datTest$dummy)
 #' }
 #' @export getLSTMmodel
 

@@ -7,7 +7,8 @@
 \usage{
 mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds,
   optimizer = "rmsprop", initializer = mx.init.Xavier(),
-  initialModel = NULL, shuffle = TRUE, epoch.end.callback = NULL, ...)
+  initialModel = NULL, shuffle = TRUE, gammaInit,
+  epoch.end.callback = NULL, ...)
 }
 \arguments{
 \item{datTrain}{list with entries 'data' and 'label'. 
@@ -31,6 +32,8 @@ mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds,
 \item{initialModel}{see \code{\link{mxLSTM}}}
 
 \item{shuffle}{see \code{\link{mxLSTM}}}
+
+\item{gammaInit}{see \code{\link{mxLSTM}}}
 
 \item{epoch.end.callback}{function to be called at the end of each epoch.}
 

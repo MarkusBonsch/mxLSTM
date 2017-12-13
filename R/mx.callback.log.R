@@ -35,7 +35,6 @@ mx.callback.log <- function (period, loggerEnv) {
       arg.arrays <- env$model$arg.arrays
       aux.arrays <- env$model$aux.arrays
 
-      test <<- function()return(NULL)
       loggerEnv$logger$checkpoint[[length(loggerEnv$logger$checkpoint) + 1]] <- 
         list(arg.params = lapply(arg.arrays, as.array),
              aux.params = lapply(aux.arrays, as.array))
