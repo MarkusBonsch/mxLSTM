@@ -2,11 +2,10 @@
 #' @description transforms a data.frame input into the correct format for the LSTM model
 #' @param dat data.frame with variables. Is assumed to be a time-series without gaps. 
 #'            Each column corresponds to one variable
-#' @param targetColumn Name of the column that represents the regression target. 
+#' @param targetColumn Name of the column(s) that represents the regression target. 
 #'                     All other columns are considered as inputs
 #' @param seq.length sequence length. 
 #' @param seq.freq frequency of sequence starts. Defaults to sequence length.
-#' @importFrom abind abind
 #' @import data.table
 #' @return a list of two: 'x' is an array with input variables as required for \code{\link{mxLSTM}}.
 #'                        'y' is an array of target values as required for \code{\link{mxLSTM}}.
@@ -15,7 +14,6 @@
 #' @export         
 transformLSTMinput <- function(dat, targetColumn, seq.length, seq.freq = seq.length){
   
-  if(length(targetColumn) != 1) stop("Only single column target data supported")
   dat <- data.table(dat)
   
   xVariables <- setdiff(names(dat), targetColumn)
@@ -73,24 +71,27 @@ transformLSTMinput <- function(dat, targetColumn, seq.length, seq.freq = seq.len
   dat <- dat[completeSequence == TRUE]
   dat[, completeSequence := NULL]
   
-  ## convert inputs to 3d array
-  x <- split(dat[, -c("sequence", targetColumn), with = FALSE], dat$sequence) %>% 
-    ## transpose to get features into 1st dimension
-    lapply(t) %>% 
-    ## bind everything together according to the correct dimension
-    abind(along = 3) 
+  ## add sequence element id
+  dat[, element := seq_len(.N), by = "sequence"]
   
-  ## convert target to 2d array
+  ## melt to long format to extract correct vector
+  vals <- 
+    dat[, c(xVariables, targetColumn, "sequence", "element"), with = FALSE] %>% 
+    melt(measure.vars = c(xVariables, targetColumn), variable.factor = FALSE ## subsetting on character with chin is faster than on factor
+         ) %>% 
+    setkey(sequence, element, variable)
   ## convert inputs to 3d array
-  y <- split(dat[, targetColumn, with = FALSE], dat$sequence) %>% 
-    ## bind everything together according to the correct dimension
-    abind(along = 2)
+  x <- array(data = NA, dim = c(length(xVariables), seq.length, length(unique(dat$sequence))))
+  x[,,] <- vals[variable %chin% xVariables]$value
+  ## convert targets to 3d array
+  y <- array(data = NA, dim = c(length(targetColumn), seq.length, length(unique(dat$sequence))))
+  y[,,] <- vals[variable %chin% targetColumn]$value
   
   ## discard sequences that contain NAs
-  naData <- colSums(is.na(x), dims = 2) > 0 | colSums(is.na(y), dims = 1) > 0
+  naData <- colSums(is.na(x), dims = 2) > 0 | colSums(is.na(y), dims = 2) > 0
   
   x <- x[,, !naData, drop = FALSE]
-  y <- y[, !naData, drop = FALSE]
+  y <- y[,, !naData, drop = FALSE]
   
   return(list(x = x, y = y))
   
