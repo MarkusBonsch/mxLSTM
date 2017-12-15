@@ -79,12 +79,16 @@ transformLSTMinput <- function(dat, targetColumn, seq.length, seq.freq = seq.len
     dat[, c(xVariables, targetColumn, "sequence", "element"), with = FALSE] %>% 
     melt(measure.vars = c(xVariables, targetColumn), variable.factor = FALSE ## subsetting on character with chin is faster than on factor
          ) %>% 
-    setkey(sequence, element, variable)
+    setkey(sequence, element)
   ## convert inputs to 3d array
-  x <- array(data = NA, dim = c(length(xVariables), seq.length, length(unique(dat$sequence))))
+  x <- array(data = NA, 
+             dim = c(length(xVariables), seq.length, length(unique(dat$sequence))),
+             dimnames = list(xVariables, NULL, NULL))
   x[,,] <- vals[variable %chin% xVariables]$value
   ## convert targets to 3d array
-  y <- array(data = NA, dim = c(length(targetColumn), seq.length, length(unique(dat$sequence))))
+  y <- array(data = NA, 
+             dim = c(length(targetColumn), seq.length, length(unique(dat$sequence))),
+             dimnames = list(targetColumn, NULL, NULL))
   y[,,] <- vals[variable %chin% targetColumn]$value
   
   ## discard sequences that contain NAs
