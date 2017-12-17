@@ -308,11 +308,13 @@ test_that("Result correctness", {
   # test1 Check that transformation and inverse transformation are identity
   
   dat <- 
-    data.table(x1 = 1:10,
+    data.table(x3 = 1:10,
                x2 = 11:20,
-               x3 = 21:30,
-               y  = 31:40) %>% 
-    transformLSTMinput(targetColumn = "y", seq.length = 4)
+               x1 = 21:30,
+               y3 = 31:40,
+               y2 = 41:50,
+               y1 = 51:60) %>% 
+    transformLSTMinput(targetColumn = c("y3", "y2", "y1"), seq.length = 4)
   
   expect_equal(caret2lstmInput(lstmInput2caret(dat)), dat)
     

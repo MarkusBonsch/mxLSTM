@@ -74,7 +74,8 @@ Differences when using it in \code{\link[caret]{train}}:
       }
                                                 
                                               
-\item{Different prediction function}{For predicting from the model as returned by caret's \code{\link[caret]{train}},
+\strong{Different prediction function:}
+{For predicting from the model as returned by caret's \code{\link[caret]{train}},
                                      you have to use the \code{\link{predictAll}} function. This will call the internal
                                      predict function of \code{getLSTMmodel} returning predictions for all y-variables.}
                                                 
