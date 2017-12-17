@@ -267,6 +267,30 @@ test_that("Result correctness", {
   # test8
   ########################################################
   
+  #######################################################
+  # test9 variables not in alphabetical order
+  dat <- data.frame(x3 = 1:10,
+                    x2 = 11:20,
+                    x1 = 21:30,
+                    y  = 31:40)
+  
+  targetX <- array(dat$x1, dim = c(3,4,2))
+  targetX[,1,1] <- c(1,11,21)
+  targetX[,2,1] <- c(2,12,22)
+  targetX[,3,1] <- c(3,13,23)
+  targetX[,4,1] <- c(4,14,24)
+  targetX[,1,2] <- c(5,15,25)
+  targetX[,2,2] <- c(6,16,26)
+  targetX[,3,2] <- c(7,17,27)
+  targetX[,4,2] <- c(8,18,28)  
+  
+  targetY <- array(dat$y, dim = c(1,4,2))
+  
+  expect_lt(max(abs(transformLSTMinput(dat, seq.length = 4, targetColumn = "y")$x - targetX)), 1e-7)
+  expect_lt(max(abs(transformLSTMinput(dat, seq.length = 4, targetColumn = "y")$y - targetY)), 1e-7)
+  
+  # test9
+  ########################################################
   
   
 })
