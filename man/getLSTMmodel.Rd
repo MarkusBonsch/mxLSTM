@@ -106,7 +106,7 @@ Differences when using it in \code{\link[caret]{train}}:
     \item{\strong{plot training history}} {It is possible to plot the training history
       of an mxLSTM model with \code{\link{plot_trainHistory}}}
     \item{\strong{restore checkpoint from specified epoch}}{ It is possible to restore
-     the model weights after a given epoch with the function \code{\link{restoreLSTMcheckpoint}}.}
+     the model weights after a given epoch with the function \code{\link{restoreLstmCheckpoint}}.}
       
   }
 }

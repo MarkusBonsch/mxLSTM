@@ -30,7 +30,7 @@
 #'                      T. Cooljmans et al. ILRC 2017 "Recurrent batch normalization".
 #' @param gammaInit numeric value. Will be used to initialize the gamma matrices of batchNormLayers. 
 #'                  Cooljmans et al. recommend 0.1 (for use with tanh activation), mxnet default is 1.
-#'                  My experience: 0.1 works very badly with relu activation.
+#'                  My experience: 0.1 works very poorly with relu activation.
 #' @param batch.size self explanatory
 #' @param activation activation function for update layers in the LSTM cells. "relu" or "tanh"
 #' @param optimizer character specifying the type of optimizer to use.
@@ -88,7 +88,7 @@
 #' }
 
 mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dropoutLstm = num.hidden * 0,
-                   zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, gammaInit = 0.1, batch.size = 128, activation = "relu", optimizer = "rmsprop", 
+                   zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, gammaInit = 1, batch.size = 128, activation = "relu", optimizer = "rmsprop", 
                    initializer = mx.init.Xavier(), shuffle = TRUE, initialModel = NULL, ...){
   
   
