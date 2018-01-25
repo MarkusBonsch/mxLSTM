@@ -4,13 +4,15 @@
 \alias{mxLSTMsetup}
 \title{mxLSTMsetup}
 \usage{
-mxLSTMsetup(model, num.features, num.hidden, seq.length, batch.size,
-  initializer, initialModel = NULL, gammaInit)
+mxLSTMsetup(model, num.features, num.outputs, num.hidden, seq.length,
+  batch.size, initializer, initialModel = NULL, gammaInit)
 }
 \arguments{
 \item{model}{mxSymbol as returned by mxLSTMcreate}
 
 \item{num.features}{number of input features.}
+
+\item{num.outputs}{number of target variables}
 
 \item{num.hidden}{see \code{\link{mxLSTM}}}
 

@@ -13,7 +13,7 @@ mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds,
 \arguments{
 \item{datTrain}{list with entries 'data' and 'label'. 
 'data' is a 3D array of dimension num.features:seq.length:number of observations
-'label is a 2D array of dimension seq.length:numer of observations}
+'label is a 3D array of dimension num.outputs:seq.length:number of observations}
 
 \item{datEval}{similar to datTrain, but for evaluation instead of training.}
 

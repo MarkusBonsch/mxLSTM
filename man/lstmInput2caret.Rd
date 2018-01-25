@@ -12,9 +12,9 @@ lstmInput2caret(dat)
 \value{
 a data.frame as required by caret's \code{\link[caret]{train}} with \code{\link{getLSTMmodel}}.
         Each row is one event. The columns contain x and y variables for the full sequence with names:
-        x1_seq1, x2_seq1, ..., xN_seq1, x1_seq2, ..., xN_seq2, x1_seqM, ..., xN_seqM, y1_seq1Y, ..., y1_seqMY.
-        Additioanlly, the y-variable of the last sequence element is duplicated into the 'dummy' variable for the left
-        hand side of the caret formula
+        x1_seq1, x2_seq1, ..., xN_seq1, x1_seq2, ..., xN_seq2, x1_seqM, ..., xN_seqM, y1_seq1Y, y2_seq1Y ..., y1_seqMY, yK_seqMY.
+        Additionally, y1_seqMY into the 'dummy' variable for the left
+        hand side of the caret formula and serves as the primary target.
 }
 \description{
 transforms a list of arrays as returned by \code{\link{transformLSTMinput}} 

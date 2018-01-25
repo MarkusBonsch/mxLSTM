@@ -37,7 +37,7 @@ mxLSTM(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden,
 
 \item{test.y}{same as y but for testing, not for training}
 
-\item{num.hidden}{integer vector of flexible length. For each entry, an LSTM layer is with the corresponding number of
+\item{num.hidden}{integer vector of flexible length. For each entry, an LSTM layer with the corresponding number of
 neurons is created.}
 
 \item{dropoutLstm}{numeric vector of same length as num.hidden. Specifies the dropout probability for each LSTM layer.
@@ -89,26 +89,38 @@ library(data.table)
 ## simple data: one numeric output as a function of two numeric inputs.
 ## including lag values
 ## with some noise.
-dat <- data.table(x = runif(n = 8000, min = 1000, max = 2000),
-                  y = runif(n = 8000, min = -10, max = 10))
+nObs <- 20000
+dat <- data.table(x = runif(n = nObs, min = 1000, max = 2000),
+                  y = runif(n = nObs, min = -10, max = 10))
 ## create target
 dat[, target := 0.5 * x + 0.7 * lag(y, 3) - 0.2 * lag(x, 5)]
-dat[, target := target + rnorm(8000, 0, 10)]
+dat[, target2 := 0.1 * x + 0.3 * lag(y, 1) - 0.4 * lag(x, 2)]
+dat[, target := target + rnorm(nObs, 0, 10)]
+dat[, target2 := target2 + rnorm(nObs, 0, 10)]
+
 ## convert to nxLSTM input
-dat <- transformLSTMinput(dat = dat, targetColumn = "target", seq.length = 5)
+dat <- transformLSTMinput(dat = dat, targetColumn = c("target", "target2"), seq.length = 5)
+
+## split into training and test set
+trainIdx <- sample(dim(dat$x)[3], as.integer(dim(dat$x)[3]/2))
+testIdx  <- seq_len(dim(dat$x)[3])[-trainIdx]
 
 ## train model
-model <- mxLSTM(x = dat$x, y = dat$y, num.epoch = 10, num.hidden = 64, 
-                dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE, batch.size = 128)
+model <- mxLSTM(x = dat$x[,,trainIdx], y = dat$y[,,trainIdx], num.epoch = 50, num.hidden = 64, 
+                dropoutLstm = 0, zoneoutLstm = 0.01, batchNormLstm = TRUE, batch.size = 128)
 
 ## plot training history
 plot_trainHistory(model)
 
-## get some predictions (on training set)
-predTrain <- predictLSTMmodel(model = model, dat = dat$x, fullSequence = FALSE)
+## get some predictions (on test set)
+predTest <- predictLSTMmodel(model = model, dat = dat$x[,,testIdx], fullSequence = FALSE)
 
 ## nice plot
-plot_goodnessOfFit(predicted = predTrain$y, observed = dat$y[5,])
+plot_goodnessOfFit(predicted = predTest$y1, observed = dat$y[1,5, testIdx])
+plot_goodnessOfFit(predicted = predTest$y2, observed = dat$y[2,5, testIdx])
+
+## save the model
+## saveLstmModel(model, "testModel")
 }
 }
 \seealso{

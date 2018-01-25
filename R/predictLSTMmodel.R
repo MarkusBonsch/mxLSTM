@@ -38,7 +38,7 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
   batch.size <- dim(model$arg.params$data)[3]  
   
   ## create dummy y variables as placeholder
-  y <- array(0, dim = dim(dat)[2:3])
+  y <- array(0, dim = dim(dat))
 
   ## create the iterator over batches
   input <- mx.io.arrayiter(data    = dat, 
@@ -81,10 +81,10 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
       ## remove those from the output. Be careful: the output is ordered as follows: 
       ## elem1seq1, elem2seq1, ..., elemNseq1, ..., elemNseq2, ..., elemNseqN
       timeOrderIndices <- integer(0)
-      for(seq in seq_len(batch.size - padded)){
+      for(s in seq_len(batch.size - padded)){
         timeOrderIndices <-
           c(timeOrderIndices,
-            seq(seq - 1,
+            seq(s - 1,
                 seq.len * batch.size- 1,
                 by = batch.size
                 )
@@ -116,7 +116,7 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
     packer$get() %>% 
     t %>% 
     data.table %>% 
-    setnames("y")
+    setnames(if(length(.) > 1) paste0("y", seq_along(.)) else "y")
   
   
   ## get an index of row numbers

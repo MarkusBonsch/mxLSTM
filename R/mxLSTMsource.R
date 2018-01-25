@@ -17,7 +17,7 @@
 #' @param test.x same as x, but for testing, not for training
 #' @param test.y same as y but for testing, not for training
 #' @param num.epoch integer number of training epochs over full ldataset
-#' @param num.hidden integer vector of flexible length. For each entry, an LSTM layer is with the corresponding number of
+#' @param num.hidden integer vector of flexible length. For each entry, an LSTM layer with the corresponding number of
 #'                   neurons is created.
 #' @param dropoutLstm    numeric vector of same length as num.hidden. Specifies the dropout probability for each LSTM layer.
 #'                       Dropout is applied according to Cheng et al. "An exploration of dropout with LSTMs". 
@@ -53,26 +53,38 @@
 #' ## simple data: one numeric output as a function of two numeric inputs.
 #' ## including lag values
 #' ## with some noise.
-#' dat <- data.table(x = runif(n = 8000, min = 1000, max = 2000),
-#'                   y = runif(n = 8000, min = -10, max = 10))
+#' nObs <- 20000
+#' dat <- data.table(x = runif(n = nObs, min = 1000, max = 2000),
+#'                   y = runif(n = nObs, min = -10, max = 10))
 #' ## create target
 #' dat[, target := 0.5 * x + 0.7 * lag(y, 3) - 0.2 * lag(x, 5)]
-#' dat[, target := target + rnorm(8000, 0, 10)]
+#' dat[, target2 := 0.1 * x + 0.3 * lag(y, 1) - 0.4 * lag(x, 2)]
+#' dat[, target := target + rnorm(nObs, 0, 10)]
+#' dat[, target2 := target2 + rnorm(nObs, 0, 10)]
+#' 
 #' ## convert to nxLSTM input
-#' dat <- transformLSTMinput(dat = dat, targetColumn = "target", seq.length = 5)
+#' dat <- transformLSTMinput(dat = dat, targetColumn = c("target", "target2"), seq.length = 5)
+#' 
+#' ## split into training and test set
+#' trainIdx <- sample(dim(dat$x)[3], as.integer(dim(dat$x)[3]/2))
+#' testIdx  <- seq_len(dim(dat$x)[3])[-trainIdx]
 #' 
 #' ## train model
-#' model <- mxLSTM(x = dat$x, y = dat$y, num.epoch = 10, num.hidden = 64, 
-#'                 dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE, batch.size = 128)
+#' model <- mxLSTM(x = dat$x[,,trainIdx], y = dat$y[,,trainIdx], num.epoch = 50, num.hidden = 64, 
+#'                 dropoutLstm = 0, zoneoutLstm = 0.01, batchNormLstm = TRUE, batch.size = 128)
 #' 
 #' ## plot training history
 #' plot_trainHistory(model)
 #' 
-#' ## get some predictions (on training set)
-#' predTrain <- predictLSTMmodel(model = model, dat = dat$x, fullSequence = FALSE)
+#' ## get some predictions (on test set)
+#' predTest <- predictLSTMmodel(model = model, dat = dat$x[,,testIdx], fullSequence = FALSE)
 #' 
 #' ## nice plot
-#' plot_goodnessOfFit(predicted = predTrain$y, observed = dat$y[5,])
+#' plot_goodnessOfFit(predicted = predTest$y1, observed = dat$y[1,5, testIdx])
+#' plot_goodnessOfFit(predicted = predTest$y2, observed = dat$y[2,5, testIdx])
+#' 
+#' ## save the model
+#' ## saveLstmModel(model, "testModel")
 #' }
 
 mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dropoutLstm = num.hidden * 0,
@@ -80,10 +92,11 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
                    initializer = mx.init.Xavier(), shuffle = TRUE, initialModel = NULL, ...){
   
   
-  if(!all(dim(x)[2:3] == dim(y))) stop("x and y don't fit together.")
+  if(!all(dim(x)[2:3] == dim(y)[2:3])) stop("x and y don't fit together.")
   if(any(dropoutLstm * zoneoutLstm != 0)) stop("dropout and zoneout are mutually exclusive. Please adapt arguments 'dropoutLSTM' or 'zoneoutLSTM")
   
   seq.length <- dim(x)[2]
+  num.outputs <- dim(y)[1]
   
   datTrain <- list(data  = x,
                    label = y)
@@ -104,6 +117,7 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
   
   ## raw symbol
   model <- mxLSTMcreate(seq.length = seq.length, 
+                        num.outputs = num.outputs,
                         num.hidden = num.hidden, 
                         dropoutLstm   = dropoutLstm, 
                         zoneoutLstm   = zoneoutLstm,
@@ -153,6 +167,7 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
 #' @description Creates the basic network.
 #'  consists only of symbols, no binding to values yet.
 #' @param seq.length see \code{\link{mxLSTM}}
+#' @param num.outputs number of final target variables
 #' @param num.hidden see \code{\link{mxLSTM}}
 #' @param dropoutLstm see \code{\link{mxLSTM}}
 #' @param zoneoutLstm see \code{\link{mxLSTM}}
@@ -161,7 +176,7 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
 #' @param activation see \code{\link{mxLSTM}}
 #' @return MXSymbol 
 
-mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE, 
+mxLSTMcreate <- function(seq.length, num.outputs, num.hidden, dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE, 
                          batch.size = 128, activation = "relu"){
   
   if(any(num.hidden <=0)) stop("num.hidden must consist of positive numbers")
@@ -191,13 +206,13 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 
                                  squeeze_axis = TRUE, ## drop the squuezed axis
                                  name = "data")
   
-  ## target dimensions: 1 = sequence, 2 = batch-size
-  ## target is reshpaed so that targets of all 
-  ## sequences are concatenated to result in a one dimensional matrix with length seq.length * batch.size
-  ## The order of element is as follows: batch1seq1, batch2seq1, ..., batch[batch.size]seq1, batch1seq2, ...
+  ## target dimensions: 1 = target variable, 2 = sequence, 3 = batch-size
+  ## target is reshaped so that targets of all 
+  ## sequences are concatenated to result in a two dimensional matrix with dimensions: 1 = numOutputs, 2 = seq.length * batch.size
+  ## The order of elements in dimension 2 is as follows: batch1seq1, batch2seq1, ..., batch[batch.size]seq1, batch1seq2, ...
   label <- mx.symbol.Variable("label")
-  label <- mx.symbol.transpose(data = label)
-  label <- mx.symbol.Reshape(data = label, shape = batch.size * seq.length)
+  label <- mx.symbol.transpose(data = label, axes = c(2,0,1))
+  label <- mx.symbol.Reshape(data = label, shape = c(num.outputs, batch.size * seq.length))
   
   ## create symbol variables for the memory
   
@@ -279,7 +294,7 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 
   model <- mx.symbol.FullyConnected(data   = model, 
                                     weight = outWeights, 
                                     bias   = outBias, 
-                                    num.hidden = 1 ## only one output per element for the final prediction
+                                    num.hidden = num.outputs ## number of target variables to be predicted
   )
   
   ## regression output function
@@ -294,6 +309,7 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 
 #' @description initialize the weights and input matrices with random number to create an executable model
 #' @param model mxSymbol as returned by mxLSTMcreate
 #' @param num.features number of input features.
+#' @param num.outputs number of target variables
 #' @param num.hidden see \code{\link{mxLSTM}}
 #' @param seq.length see \code{\link{mxLSTM}}
 #' @param batch.size see \code{\link{mxLSTM}}
@@ -301,13 +317,13 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 
 #' @param initialModel see \code{\link{mxLSTM}}
 #' @param gammaInit    see \code{\link{mxLSTM}}
 #' @return MXExecutor
-mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size, initializer, initialModel = NULL, gammaInit){
+mxLSTMsetup <- function(model, num.features, num.outputs, num.hidden, seq.length, batch.size, initializer, initialModel = NULL, gammaInit){
   
   ## provide a list with known shapes of input arrays.
   ## This will help to estimate the weight dimensions.
   initShapes <- list()
   initShapes$data <- c(num.features, seq.length, batch.size)
-  initShapes$label <- c(seq.length, batch.size) ## will fail for num.outputs > 1
+  initShapes$label <- c(num.outputs, seq.length, batch.size)
   
   for(layer in seq_along(num.hidden)){
     
@@ -382,8 +398,6 @@ mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size,
       stop("Initial model does not fit to current settings")
     }
     
-    f <<- function()return(NULL)
-    
     initValues <- list(arg.params = initialModel$arg.params,
                        aux.params = initialModel$aux.params)
   }
@@ -407,7 +421,7 @@ mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size,
 #' @description train the LSTM
 #' @param datTrain list with entries 'data' and 'label'. 
 #'                 'data' is a 3D array of dimension num.features:seq.length:number of observations
-#'                 'label is a 2D array of dimension seq.length:numer of observations
+#'                 'label is a 3D array of dimension num.outputs:seq.length:number of observations
 #' @param datEval similar to datTrain, but for evaluation instead of training.
 #' @param symbol mxSymbol as returned by \code{\link{mxLSTMcreate}}
 #' @param batchSize see \code{\link{mxLSTM}}
@@ -429,10 +443,12 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
   seq.length   <- dim(datTrain$data)[2]
   batch.size   <- batchSize
   num.features <- dim(datTrain$data)[1]
+  num.outputs  <- dim(datTrain$label)[1]
   
   ## executor
   model  <- mxLSTMsetup(model        = symbol, 
                         num.features = num.features, 
+                        num.outputs  = num.outputs,
                         num.hidden   = num.hidden, 
                         seq.length   = seq.length, 
                         batch.size   = batch.size, 
@@ -460,14 +476,15 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
   
   ## set evaluation metric to RMSE
   metric <- mx.metric.rmse
+
+  ## for resetting the input states
+  init.states.cleared <- 
+    lapply(model$arg.arrays[init.states.name], function(x) return(x * 0))
   
   for (epoch in 1:num.rounds) {
     
     ## beginning of an epoch:
     ## Clear input state arrays
-    init.states.cleared <- 
-      lapply(model$arg.arrays[init.states.name], function(x) return(x * 0))
-    
     mx.exec.update.arg.arrays(model, init.states.cleared, match.name = TRUE)
     
     ## reset train iterator to first batch
@@ -508,8 +525,8 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
       ## Only use the last value of each sequence
       train.metric <- 
         metric$update(label = data$label %>% 
-                        mx.nd.choose.element.0index(rhs = rep(seq.length - 1, 
-                                                              batch.size) %>% mx.nd.array()),
+                        mx.nd.slice.axis(axis = 1, begin = seq.length - 1, end = seq.length) %>% 
+                        mx.nd.flatten,
                       pred  = model$ref.outputs$lstm_output %>% ## will fail with num.output > 1 
                         mx.nd.take(indices = (seq.length - 1) * batch.size + (0 : (batch.size - 1)) %>% 
                                      mx.nd.array()),
@@ -540,9 +557,9 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
         ## update the evaluation metric (only use the last prediction of each sequence)
         eval.metric <- 
           metric$update(label = data$label %>% 
-                          mx.nd.choose.element.0index(rhs = rep(seq.length - 1, 
-                                                                batch.size) %>% mx.nd.array()),
-                        pred  = model$ref.outputs$lstm_output %>% ## will fail with num.output > 1 
+                          mx.nd.slice.axis(axis = 1, begin = seq.length - 1, end = seq.length) %>% 
+                          mx.nd.flatten,
+                        pred  = model$ref.outputs$lstm_output %>%
                           mx.nd.take(indices = (seq.length - 1) * batch.size + (0 : (batch.size - 1)) %>% 
                                        mx.nd.array()),
                         state = eval.metric)
