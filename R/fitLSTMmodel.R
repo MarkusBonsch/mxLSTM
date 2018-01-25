@@ -63,7 +63,6 @@ fitLSTMmodel <- function(x, y, param, test.x = NULL, test.y = NULL, initialModel
                   shuffle      = param$shuffle,
                   initialModel = initialModel,
                   ## optimizer arguments
-                  learning.rate= param$learning.rate,
                   wd           = param$weight.decay,
                   gamma1       = param$learningrate.momentum,
                   gamma2       = param$momentum,

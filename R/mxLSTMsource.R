@@ -34,10 +34,15 @@
 #' @param batch.size self explanatory
 #' @param activation activation function for update layers in the LSTM cells. "relu" or "tanh"
 #' @param optimizer character specifying the type of optimizer to use.
+#' @param learning.rate learning rate for the optimizer. Can be a single number or a named vector for adaptive learning rate.
+#'                      If it is a vector, the names have to specify the epoch at which this value becomes active. For example
+#'                      \code{learning.rate = c(1=0.004, 30 = 0.002, 50 = 0.0005)} will train epochs 1 to 29 with \code{0.004}, epochs 30 to 49
+#'                      with \code{0.002} and everything after 50 with \code{0.0005}
 #' @param initializer random initializer for weights
 #' @param shuffle    Boolean. Should the training data be reordered randomly prior to training? 
 #'                   (reorders full sequences, order within each sequence is unaffected.)
 #' @param initialModel mxLSTM model. If provided, all weights are initialized based on the given model.
+
 #' @param ... Additional arguments to optimizer
 #' @return object of class mxLSTM: list: a symbol, arg.params, aux.params, a log, and the variable names
 #' @details sequence length is inferred from input (dimension 2).
@@ -49,8 +54,7 @@
 #'\dontrun{
 #' library(mxLSTM)
 #' library(data.table)
-#' 
-#' ## simple data: one numeric output as a function of two numeric inputs.
+#' ## simple data: two numeric outputs as a function of two numeric inputs.
 #' ## including lag values
 #' ## with some noise.
 #' nObs <- 20000
@@ -70,8 +74,16 @@
 #' testIdx  <- seq_len(dim(dat$x)[3])[-trainIdx]
 #' 
 #' ## train model
-#' model <- mxLSTM(x = dat$x[,,trainIdx], y = dat$y[,,trainIdx], num.epoch = 50, num.hidden = 64, 
-#'                 dropoutLstm = 0, zoneoutLstm = 0.01, batchNormLstm = TRUE, batch.size = 128)
+#' model <- mxLSTM(x = dat$x[,,trainIdx], 
+#'                 y = dat$y[,,trainIdx], 
+#'                 num.epoch = 50, 
+#'                 num.hidden = 64, 
+#'                 dropoutLstm = 0, 
+#'                 zoneoutLstm = 0.01, 
+#'                 batchNormLstm = TRUE, 
+#'                 batch.size = 128, 
+#'                 optimizer = "rmsprop",
+#'                 learning.rate =  c("1" = 0.005, "20" = 0.002, "40" = 0.0005))
 #' 
 #' ## plot training history
 #' plot_trainHistory(model)
@@ -88,10 +100,22 @@
 #' }
 
 mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dropoutLstm = num.hidden * 0,
-                   zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, gammaInit = 1, batch.size = 128, activation = "relu", optimizer = "rmsprop", 
+                   zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, gammaInit = 1, batch.size = 128, 
+                   activation = "relu", optimizer = "rmsprop", learning.rate = 0.002,
                    initializer = mx.init.Xavier(), shuffle = TRUE, initialModel = NULL, ...){
   
-  
+  ## sanity checks for adaptive learningrate
+  if(is.null(names(learning.rate))){
+    if(length(learning.rate) > 1) stop("If a vector of learning.rates is given, it must be named.")
+    names(learning.rate) <-  "1" ## the single value provided learning.rate is valid starting with the first epoch
+  }
+  if(names(learning.rate)[1] != "1") stop("learning.rate must have an entry for epoch 1, e.g. learning.rate = c('1' = 0.002, ...)")
+  if(anyDuplicated(names(learning.rate))) stop("Duplicated entries in names(learning.rate")
+  if(anyNA(as.integer(names(learning.rate)))) stop("names(learning.rate) must be coercible to integer.")
+  ## convert learning.rate to data.table for lookup of epochs
+  learning.rate <- data.table(epoch = as.integer(names(learning.rate)),
+                              lr    = learning.rate, key = "epoch")
+
   if(!all(dim(x)[2:3] == dim(y)[2:3])) stop("x and y don't fit together.")
   if(any(dropoutLstm * zoneoutLstm != 0)) stop("dropout and zoneout are mutually exclusive. Please adapt arguments 'dropoutLSTM' or 'zoneoutLSTM")
   
@@ -141,6 +165,7 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
                        num.hidden = num.hidden,
                        num.rounds = num.epoch, 
                        optimizer  = optimizer, 
+                       learning.rate = learning.rate,
                        initializer =initializer,
                        initialModel=initialModel,
                        shuffle    = shuffle, 
@@ -428,6 +453,12 @@ mxLSTMsetup <- function(model, num.features, num.outputs, num.hidden, seq.length
 #' @param num.hidden see \code{\link{mxLSTM}}
 #' @param num.rounds see num.epoch argument in \code{\link{mxLSTM}}
 #' @param optimizer see \code{\link{mxLSTM}}
+#' @param learning.rate data.table with two columns: 
+#'                      \itemize{
+#'                         \item{\code{epoch}} (integer) tells from which epoch onwards this learningrate is active. 
+#'                         Has to start with 1
+#'                         \item{\code{lr}} (numeric) the actual value for the learningrate
+#'                      }\code{epoch}
 #' @param initializer see \code{\link{mxLSTM}}
 #' @param initialModel see \code{\link{mxLSTM}}
 #' @param shuffle see \code{\link{mxLSTM}}
@@ -437,7 +468,9 @@ mxLSTMsetup <- function(model, num.features, num.outputs, num.hidden, seq.length
 #' @return  object of class 'mxLSTM' 
 #'        list: 'model' is the actual symbol, 'arg.params' and 'aux.params' are the parameters,
 #'         'log' is the training log, 'optimizerEnv' is an optional environment with optimizer parameters.
-mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds, optimizer = "rmsprop", initializer = mx.init.Xavier(),
+mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds, optimizer = "rmsprop", 
+                        learning.rate = data.table(epoch = 1L, lr = 0.002),
+                        initializer = mx.init.Xavier(),
                         initialModel = NULL, shuffle = TRUE, gammaInit, epoch.end.callback = NULL, ...){
   
   seq.length   <- dim(datTrain$data)[2]
@@ -471,7 +504,13 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
   }
   
   ## prepare optimizer
-  opt <- mx.opt.create(optimizer, rescale.grad = (1/batch.size), ...)
+  ## learning.rate will be set epoch wise later on.
+  ## to do this, we have to add a dummy learningrate scheduler. 
+  if(is.character(optimizer)){
+    opt <- mx.opt.create(optimizer, rescale.grad = (1/batch.size), lr_scheduler = function(x) return(invisible(NULL)), ...)
+  } else {
+    opt <- optimizer(rescale.grad = (1/batch.size), lr_scheduler = function(x) return(invisible(NULL)), ...)
+  }
   updater <- mx.opt.get.updater(opt, model$ref.arg.arrays)
   
   ## set evaluation metric to RMSE
@@ -481,7 +520,7 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
   init.states.cleared <- 
     lapply(model$arg.arrays[init.states.name], function(x) return(x * 0))
   
-  for (epoch in 1:num.rounds) {
+  for (thisEpoch in 1:num.rounds) {
     
     ## beginning of an epoch:
     ## Clear input state arrays
@@ -492,6 +531,13 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
     
     ## initialize train metric for this epoch
     train.metric <- metric$init()  
+    
+    ## set the correct learning.rate for this epoch.
+    newLr <- learning.rate[epoch == thisEpoch]$lr
+    if(length(newLr)){
+      ## only update if there is a match for the epoch
+      assign(x = "lr", value = newLr, envir = get("rmsprop", environment(opt$update)))
+    }
     
     while (trainIterator$iter.next()) {
       
@@ -575,7 +621,7 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
     continue <- TRUE
     if(!is.null(epoch.end.callback)){
       
-      continue <- epoch.end.callback(epoch, 0, environment())
+      continue <- epoch.end.callback(thisEpoch, 0, environment())
     }
     
     if(!continue) break

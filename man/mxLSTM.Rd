@@ -9,8 +9,8 @@
 \usage{
 mxLSTM(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden,
   dropoutLstm = num.hidden * 0, zoneoutLstm = num.hidden * 0,
-  batchNormLstm = FALSE, gammaInit = 0.1, batch.size = 128,
-  activation = "relu", optimizer = "rmsprop",
+  batchNormLstm = FALSE, gammaInit = 1, batch.size = 128,
+  activation = "relu", optimizer = "rmsprop", learning.rate = 0.002,
   initializer = mx.init.Xavier(), shuffle = TRUE, initialModel = NULL,
   ...)
 }
@@ -53,13 +53,18 @@ T. Cooljmans et al. ILRC 2017 "Recurrent batch normalization".}
 
 \item{gammaInit}{numeric value. Will be used to initialize the gamma matrices of batchNormLayers. 
 Cooljmans et al. recommend 0.1 (for use with tanh activation), mxnet default is 1.
-My experience: 0.1 works very badly with relu activation.}
+My experience: 0.1 works very poorly with relu activation.}
 
 \item{batch.size}{self explanatory}
 
 \item{activation}{activation function for update layers in the LSTM cells. "relu" or "tanh"}
 
 \item{optimizer}{character specifying the type of optimizer to use.}
+
+\item{learning.rate}{learning rate for the optimizer. Can be a single number or a named vector for adaptive learning rate.
+If it is a vector, the names have to specify the epoch at which this value becomes active. For example
+\code{learning.rate = c(1=0.004, 30 = 0.002, 50 = 0.0005)} will train epochs 1 to 29 with \code{0.004}, epochs 30 to 49
+with \code{0.002} and everything after 50 with \code{0.0005}}
 
 \item{initializer}{random initializer for weights}
 
@@ -85,8 +90,7 @@ sequence length is inferred from input (dimension 2).
 \dontrun{
 library(mxLSTM)
 library(data.table)
-
-## simple data: one numeric output as a function of two numeric inputs.
+## simple data: two numeric outputs as a function of two numeric inputs.
 ## including lag values
 ## with some noise.
 nObs <- 20000
@@ -106,8 +110,16 @@ trainIdx <- sample(dim(dat$x)[3], as.integer(dim(dat$x)[3]/2))
 testIdx  <- seq_len(dim(dat$x)[3])[-trainIdx]
 
 ## train model
-model <- mxLSTM(x = dat$x[,,trainIdx], y = dat$y[,,trainIdx], num.epoch = 50, num.hidden = 64, 
-                dropoutLstm = 0, zoneoutLstm = 0.01, batchNormLstm = TRUE, batch.size = 128)
+model <- mxLSTM(x = dat$x[,,trainIdx], 
+                y = dat$y[,,trainIdx], 
+                num.epoch = 50, 
+                num.hidden = 64, 
+                dropoutLstm = 0, 
+                zoneoutLstm = 0.01, 
+                batchNormLstm = TRUE, 
+                batch.size = 128, 
+                optimizer = "rmsprop",
+                learning.rate =  c("1" = 0.005, "20" = 0.002, "40" = 0.0005))
 
 ## plot training history
 plot_trainHistory(model)

@@ -82,9 +82,7 @@
 #'                          \item{activation}{ Activation function for the update layers in the LSTM cells. "relu" or "tanh"}
 #'                          \item{shuffle}{ Boolean. Should the training batches be randomly reordered? 
 #'                                Each sequence of course stays in its native order}
-#'                          \item{learning_rate:} { defaults to 0.002}
 #'                          \item{weight_decay:} { defaults to 0}
-#'                          \item{dropout:}{ [0;1] fraction of neurons that are randomly discarded in each hidden layer during training. Default: 0}
 #'                          \item{learningrate_momentum:} { gamma1. See API description of mx.opt.rmsprop}
 #'                          \item{momentum:} { gamma2. See API description of mx.opt.rmsprop.}
 #'                          \item{clip_gradients:} { See API description of mx.opt.rmsprop}
@@ -108,8 +106,8 @@
 #' @examples 
 #'\dontrun{
 #' library(mxLSTM)
-#' library(mxnet)
 #' library(data.table)
+#' library(caret)
 #' ###########################################################
 #' ## perform a regression with nxLSTM
 #' ## on dummy data
@@ -152,7 +150,7 @@
 #' 
 #' ## grid for defining the parameters of the mxNet model
 #' lstmGrid <- expand.grid(layer1 = 64, layer2 = 0, layer3 = 0,
-#'                         learning.rate = 0.002, weight.decay = 0, dropout1 = 0, dropout2 = 0, dropout3 = 0,
+#'                         weight.decay = 0, dropout1 = 0, dropout2 = 0, dropout3 = 0,
 #'                         learningrate.momentum = 0.95,
 #'                         momentum = 0.1, num.epoch = 50,
 #'                         batch.size = 128, activation = "relu", shuffle = TRUE, stringsAsFactors = FALSE)
@@ -170,7 +168,9 @@
 #'                     preProcessY = c("scale", "center"), ## in case of multiple y, this makes sense imho
 #'                     debugModel = FALSE,
 #'                     trControl = thisTrainControl,
-#'                     tuneGrid = lstmGrid)
+#'                     tuneGrid = lstmGrid,
+#'                     learning.rate = c("1" = 0.02, "40" = 0.0002) ## adaptive learningrate that changes at epoch 40
+#' )
 #' 
 #' ## get nice output of training history
 #' plot_trainHistory(caret_lstm$finalModel)
@@ -237,9 +237,6 @@ getLSTMmodel <- function(){
           data.frame(parameter = "shuffle", class = "logical", label = "switch for activating reshuffling of training events"))
   lstmModel$parameters <- 
     rbind(lstmModel$parameters, 
-          data.frame(parameter = "learning.rate", class = "numeric", label = "Initial learning rate"))
-  lstmModel$parameters <- 
-    rbind(lstmModel$parameters, 
           data.frame(parameter = "weight.decay", class = "numeric", label = "Weight decay"))
   lstmModel$parameters <- 
     rbind(lstmModel$parameters, 
@@ -255,7 +252,7 @@ getLSTMmodel <- function(){
       out <- expand.grid(seq.length = 12, layer1 = ((1:len) * 2) - 1, layer2 = 0, layer3 = 0, 
                          num.epoch = 10, activation = "relu", batch.size = 128, 
                          dropout1 = 0, dropout2 = 0, dropout3 = 0, shuffle = TRUE,
-                         learning.rate = 0.002, weight.decay = 0, learningrate.momentum = 0.9, 
+                         weight.decay = 0, learningrate.momentum = 0.9, 
                          momentum = 0.9)
     }
   
@@ -319,13 +316,13 @@ getLSTMmodel <- function(){
     
     ## preProcess x and y
     preProcessX <- getPreProcessor(dat = datX,
-                                     preProcess = preProcessX,
-                                     preProcOptions = preProcOptions)
+                                   preProcess     = preProcessX,
+                                   preProcOptions = preProcOptions)
     datX <- predictPreProcessor(preProcess = preProcessX, dat = datX)
     
     preProcessY <- getPreProcessor(dat = datY,
-                                     preProcess = preProcessY,
-                                     preProcOptions = preProcOptions)
+                                   preProcess     = preProcessY,
+                                   preProcOptions = preProcOptions)
     datY <- predictPreProcessor(preProcess = preProcessY, dat = datY)
 
     dat <- transformLSTMinput(cbind(datX, datY), targetColumn = yVariables, seq.length = seq.length)

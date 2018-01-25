@@ -7,13 +7,13 @@ Authors@R: c(
 Description: Provides functions for doing and evaluating regressions with LSTMs.
 License: GPL
 LazyData: TRUE
+Depends: mxnet
 Imports:
     ggplot2,
     cowplot,
     utils,
     stats,
     caret,
-    mxnet,
     magrittr,
     highcharter,
     abind,
