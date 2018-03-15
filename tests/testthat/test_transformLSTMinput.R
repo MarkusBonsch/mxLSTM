@@ -8,7 +8,7 @@ test_that("Result correctness", {
                     y  = 21:30)
   
   targetX <- array(dat$x, dim = c(1,4,2))
-  targetY <- array(dat$y, dim = c(4,2))
+  targetY <- array(dat$y, dim = c(1,4,2))
 
   expect_lt(max(abs(transformLSTMinput(dat, targetColumn = "y", seq.length = 4)$x - targetX)), 1e-7)
   expect_lt(max(abs(transformLSTMinput(dat, targetColumn = "y", seq.length = 4)$y - targetY)), 1e-7)
@@ -33,7 +33,7 @@ test_that("Result correctness", {
   targetX[,3,2] <- c(7,17,27)
   targetX[,4,2] <- c(8,18,28)  
   
-  targetY <- array(dat$y, dim = c(4,2))
+  targetY <- array(dat$y, dim = c(1,4,2))
   
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 4, targetColumn = "y")$x - targetX)), 1e-7)
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 4, targetColumn = "y")$y - targetY)), 1e-7)
@@ -56,13 +56,13 @@ test_that("Result correctness", {
   targetX[,2,2] <- c(7,17,27)
   targetX[,3,2] <- c(8,18,28)
 
-  targetY <- array(dat$y, dim = c(3,2))
-  targetY[1,1] <- 31
-  targetY[2,1] <- 32
-  targetY[3,1] <- 33
-  targetY[1,2] <- 36
-  targetY[2,2] <- 37
-  targetY[3,2] <- 38
+  targetY <- array(dat$y, dim = c(1,3,2))
+  targetY[1,1,1] <- 31
+  targetY[1,2,1] <- 32
+  targetY[1,3,1] <- 33
+  targetY[1,1,2] <- 36
+  targetY[1,2,2] <- 37
+  targetY[1,3,2] <- 38
   
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 3, seq.freq = 5, targetColumn = "y")$x - targetX)), 1e-7)
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 3, seq.freq = 5, targetColumn = "y")$y - targetY)), 1e-7)
@@ -89,16 +89,16 @@ test_that("Result correctness", {
   targetX[,3,3] <- c(13,23,33)
   
     
-  targetY <- array(dat$y, dim = c(3,3))
-  targetY[1,1] <- 31
-  targetY[2,1] <- 32
-  targetY[3,1] <- 33
-  targetY[1,2] <- 36
-  targetY[2,2] <- 37
-  targetY[3,2] <- 38
-  targetY[1,3] <- 41
-  targetY[2,3] <- 42
-  targetY[3,3] <- 43
+  targetY <- array(dat$y, dim = c(1,3,3))
+  targetY[1,1,1] <- 31
+  targetY[1,2,1] <- 32
+  targetY[1,3,1] <- 33
+  targetY[1,1,2] <- 36
+  targetY[1,2,2] <- 37
+  targetY[1,3,2] <- 38
+  targetY[1,1,3] <- 41
+  targetY[1,2,3] <- 42
+  targetY[1,3,3] <- 43
   
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 3, seq.freq = 5, targetColumn = "y")$x - targetX)), 1e-7)
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 3, seq.freq = 5, targetColumn = "y")$y - targetY)), 1e-7)
@@ -128,19 +128,19 @@ test_that("Result correctness", {
   targetX[,,4]   <- targetX[,,1] + 9
   targetX[,,5]   <- targetX[,,1] + 12
 
-  targetY <- array(dat$y, dim = c(7,5))
-  targetY[1,1] <- 61
-  targetY[2,1] <- 62
-  targetY[3,1] <- 63
-  targetY[4,1] <- 64
-  targetY[5,1] <- 65
-  targetY[6,1] <- 66
-  targetY[7,1] <- 67
+  targetY <- array(dat$y, dim = c(1,7,5))
+  targetY[1,1,1] <- 61
+  targetY[1,2,1] <- 62
+  targetY[1,3,1] <- 63
+  targetY[1,4,1] <- 64
+  targetY[1,5,1] <- 65
+  targetY[1,6,1] <- 66
+  targetY[1,7,1] <- 67
   
-  targetY[,2]  <- targetY[,1] + 3
-  targetY[,3]  <- targetY[,1] + 6
-  targetY[,4]  <- targetY[,1] + 9
-  targetY[,5]  <- targetY[,1] + 12
+  targetY[1,,2]  <- targetY[1,,1] + 3
+  targetY[1,,3]  <- targetY[1,,1] + 6
+  targetY[1,,4]  <- targetY[1,,1] + 9
+  targetY[1,,5]  <- targetY[1,,1] + 12
 
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 7, seq.freq = 3, targetColumn = "y")$x - targetX)), 1e-7)
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 7, seq.freq = 3, targetColumn = "y")$y - targetY)), 1e-7)
@@ -170,19 +170,19 @@ test_that("Result correctness", {
   targetX[,,4]   <- targetX[,,1] + 12
   
   
-  targetY <- array(dat$y, dim = c(8,4))
-  targetY[1,1] <- 61
-  targetY[2,1] <- 62
-  targetY[3,1] <- 63
-  targetY[4,1] <- 64
-  targetY[5,1] <- 65
-  targetY[6,1] <- 66
-  targetY[7,1] <- 67
-  targetY[8,1] <- 68
+  targetY <- array(dat$y, dim = c(1,8,4))
+  targetY[1,1,1] <- 61
+  targetY[1,2,1] <- 62
+  targetY[1,3,1] <- 63
+  targetY[1,4,1] <- 64
+  targetY[1,5,1] <- 65
+  targetY[1,6,1] <- 66
+  targetY[1,7,1] <- 67
+  targetY[1,8,1] <- 68
   
-  targetY[,2]  <- targetY[,1] + 4
-  targetY[,3]  <- targetY[,1] + 8
-  targetY[,4]  <- targetY[,1] + 12
+  targetY[1,,2]  <- targetY[1,,1] + 4
+  targetY[1,,3]  <- targetY[1,,1] + 8
+  targetY[1,,4]  <- targetY[1,,1] + 12
 
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 8, seq.freq = 4, targetColumn = "y")$x - targetX)), 1e-7)
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 8, seq.freq = 4, targetColumn = "y")$y - targetY)), 1e-7)
@@ -213,20 +213,20 @@ test_that("Result correctness", {
   targetX[,,5]   <- targetX[,,1] + 12
   
   
-  targetY <- array(dat$y, dim = c(8,5))
-  targetY[1,1] <- 61
-  targetY[2,1] <- 62
-  targetY[3,1] <- 63
-  targetY[4,1] <- 64
-  targetY[5,1] <- 65
-  targetY[6,1] <- 66
-  targetY[7,1] <- 67
-  targetY[8,1] <- 68
+  targetY <- array(dat$y, dim = c(1,8,5))
+  targetY[1,1,1] <- 61
+  targetY[1,2,1] <- 62
+  targetY[1,3,1] <- 63
+  targetY[1,4,1] <- 64
+  targetY[1,5,1] <- 65
+  targetY[1,6,1] <- 66
+  targetY[1,7,1] <- 67
+  targetY[1,8,1] <- 68
   
-  targetY[,2]  <- targetY[,1] + 3
-  targetY[,3]  <- targetY[,1] + 6
-  targetY[,4]  <- targetY[,1] + 9
-  targetY[,5]  <- targetY[,1] + 12
+  targetY[1,,2]  <- targetY[1,,1] + 3
+  targetY[1,,3]  <- targetY[1,,1] + 6
+  targetY[1,,4]  <- targetY[1,,1] + 9
+  targetY[1,,5]  <- targetY[1,,1] + 12
   
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 8, seq.freq = 3, targetColumn = "y")$x - targetX)), 1e-7)
   expect_lt(max(abs(transformLSTMinput(dat, seq.length = 8, seq.freq = 3, targetColumn = "y")$y - targetY)), 1e-7)
@@ -234,21 +234,68 @@ test_that("Result correctness", {
   # test7
   ########################################################
   
+  #######################################################
+  # test8 multiple y
+  dat <- data.frame(x1 = 1:10,
+                    x2 = 11:20,
+                    y1 = 21:30,
+                    y2 = 31:40)
+  
+  targetX <- array(dat$x1, dim = c(2,4,2))
+  targetX[,1,1] <- c(1,11)
+  targetX[,2,1] <- c(2,12)
+  targetX[,3,1] <- c(3,13)
+  targetX[,4,1] <- c(4,14)
+  targetX[,1,2] <- c(5,15)
+  targetX[,2,2] <- c(6,16)
+  targetX[,3,2] <- c(7,17)
+  targetX[,4,2] <- c(8,18)  
+  
+  targetY <- array(dat$y1, dim = c(2,4,2))
+  targetY[,1,1] <- c(21,31)
+  targetY[,2,1] <- c(22,32)
+  targetY[,3,1] <- c(23,33)
+  targetY[,4,1] <- c(24,34)
+  targetY[,1,2] <- c(25,35)
+  targetY[,2,2] <- c(26,36)
+  targetY[,3,2] <- c(27,37)
+  targetY[,4,2] <- c(28,38)  
+  
+  expect_lt(max(abs(transformLSTMinput(dat, seq.length = 4, targetColumn = c("y1", "y2"))$x - targetX)), 1e-7)
+  expect_lt(max(abs(transformLSTMinput(dat, seq.length = 4, targetColumn = c("y1", "y2"))$y - targetY)), 1e-7)
+  
+  # test8
+  ########################################################
+  
+  #######################################################
+  # test9 variables not in alphabetical order
+  dat <- data.frame(x3 = 1:10,
+                    x2 = 11:20,
+                    x1 = 21:30,
+                    y  = 31:40)
+  
+  targetX <- array(dat$x1, dim = c(3,4,2))
+  targetX[,1,1] <- c(1,11,21)
+  targetX[,2,1] <- c(2,12,22)
+  targetX[,3,1] <- c(3,13,23)
+  targetX[,4,1] <- c(4,14,24)
+  targetX[,1,2] <- c(5,15,25)
+  targetX[,2,2] <- c(6,16,26)
+  targetX[,3,2] <- c(7,17,27)
+  targetX[,4,2] <- c(8,18,28)  
+  
+  targetY <- array(dat$y, dim = c(1,4,2))
+  
+  expect_lt(max(abs(transformLSTMinput(dat, seq.length = 4, targetColumn = "y")$x - targetX)), 1e-7)
+  expect_lt(max(abs(transformLSTMinput(dat, seq.length = 4, targetColumn = "y")$y - targetY)), 1e-7)
+  
+  # test9
+  ########################################################
+  
   
 })
 
 test_that("Error handling", {
-  
-  #######################################################
-  # test1 attempt to transform two column target
-  dat <- data.frame(x = 1:10,
-                    y = 11:20)
-  
-  expect_error(transformLSTMinput(dat, seq.length = 4, targetColumn = names(dat)),
-               "Only single column target data supported")
-  
-  # test1
-  ########################################################
   
 })
 
@@ -261,11 +308,13 @@ test_that("Result correctness", {
   # test1 Check that transformation and inverse transformation are identity
   
   dat <- 
-    data.table(x1 = 1:10,
+    data.table(x3 = 1:10,
                x2 = 11:20,
-               x3 = 21:30,
-               y  = 31:40) %>% 
-    transformLSTMinput(targetColumn = "y", seq.length = 4)
+               x1 = 21:30,
+               y3 = 31:40,
+               y2 = 41:50,
+               y1 = 51:60) %>% 
+    transformLSTMinput(targetColumn = c("y3", "y2", "y1"), seq.length = 4)
   
   expect_equal(caret2lstmInput(lstmInput2caret(dat)), dat)
     

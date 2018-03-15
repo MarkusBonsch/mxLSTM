@@ -5,15 +5,16 @@
 \title{mxLSTMtrain
 #' @param model mxSymbol as returned by mxLSTMcreate}
 \usage{
-mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds,
-  optimizer = "rmsprop", initializer = mx.init.Xavier(),
-  initialModel = NULL, shuffle = TRUE, gammaInit,
-  epoch.end.callback = NULL, ...)
+mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden,
+  optimizeFullSequence, num.rounds, optimizer = "rmsprop",
+  learning.rate = data.table(epoch = 1L, lr = 0.002),
+  initializer = mx.init.Xavier(), initialModel = NULL, shuffle = TRUE,
+  gammaInit, epoch.end.callback = NULL, ...)
 }
 \arguments{
 \item{datTrain}{list with entries 'data' and 'label'. 
 'data' is a 3D array of dimension num.features:seq.length:number of observations
-'label is a 2D array of dimension seq.length:numer of observations}
+'label is a 3D array of dimension num.outputs:seq.length:number of observations}
 
 \item{datEval}{similar to datTrain, but for evaluation instead of training.}
 
@@ -23,9 +24,18 @@ mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds,
 
 \item{num.hidden}{see \code{\link{mxLSTM}}}
 
+\item{optimizeFullSequence}{see \code{\link{mxLSTM}}}
+
 \item{num.rounds}{see num.epoch argument in \code{\link{mxLSTM}}}
 
 \item{optimizer}{see \code{\link{mxLSTM}}}
+
+\item{learning.rate}{data.table with two columns: 
+\itemize{
+   \item{\code{epoch}} (integer) tells from which epoch onwards this learningrate is active. 
+   Has to start with 1
+   \item{\code{lr}} (numeric) the actual value for the learningrate
+}\code{epoch}}
 
 \item{initializer}{see \code{\link{mxLSTM}}}
 

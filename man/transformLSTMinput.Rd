@@ -10,7 +10,7 @@ transformLSTMinput(dat, targetColumn, seq.length, seq.freq = seq.length)
 \item{dat}{data.frame with variables. Is assumed to be a time-series without gaps. 
 Each column corresponds to one variable}
 
-\item{targetColumn}{Name of the column that represents the regression target. 
+\item{targetColumn}{Name of the column(s) that represents the regression target. 
 All other columns are considered as inputs}
 
 \item{seq.length}{sequence length.}

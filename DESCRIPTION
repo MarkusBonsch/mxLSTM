@@ -1,19 +1,19 @@
 Package: mxLSTM
 Type: Package
 Title: LSTM model for regression
-Version: 0.6.4
+Version: 0.7.4
 Authors@R: c(
        person(given = "Markus",family = "Bonsch",email = "mbonsch@posteo.de",role = c("aut","cre")))
 Description: Provides functions for doing and evaluating regressions with LSTMs.
 License: GPL
 LazyData: TRUE
+Depends: mxnet
 Imports:
     ggplot2,
     cowplot,
     utils,
     stats,
     caret,
-    mxnet,
     magrittr,
     highcharter,
     abind,

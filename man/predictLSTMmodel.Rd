@@ -12,7 +12,9 @@ predictLSTMmodel(model, dat, fullSequence = TRUE)
 \item{dat}{input data as provided by \code{\link{transformLSTMinput}} in the 'x' element of the list.}
 
 \item{fullSequence}{Boolean. If FALSE, only the last predicted element of a sequence is returned.
-If TRUE, a prediction for each step in the sequence is returned.}
+If TRUE, a prediction for each step in the sequence is returned.
+If the model was trained with optimizeFullSequence = FALSE, 
+this will be set to FALSE with a warning.}
 }
 \value{
 data.frame with predictions.

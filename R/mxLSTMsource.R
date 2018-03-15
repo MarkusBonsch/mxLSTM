@@ -17,8 +17,11 @@
 #' @param test.x same as x, but for testing, not for training
 #' @param test.y same as y but for testing, not for training
 #' @param num.epoch integer number of training epochs over full ldataset
-#' @param num.hidden integer vector of flexible length. For each entry, an LSTM layer is with the corresponding number of
+#' @param num.hidden integer vector of flexible length. For each entry, an LSTM layer with the corresponding number of
 #'                   neurons is created.
+#' @param optimizeFullSequence Boolean. If TRUE, each sequence element is in the output and adds to the loss.
+#'                             If FALSE (default), only the last element of each sequence will be used to optimize the model and 
+#'                             the outputs of the rest of the sequence are not available in the output.
 #' @param dropoutLstm    numeric vector of same length as num.hidden. Specifies the dropout probability for each LSTM layer.
 #'                       Dropout is applied according to Cheng et al. "An exploration of dropout with LSTMs". 
 #'                       Difference: we employ a constant dropout rate; we do per element dropout.
@@ -30,14 +33,19 @@
 #'                      T. Cooljmans et al. ILRC 2017 "Recurrent batch normalization".
 #' @param gammaInit numeric value. Will be used to initialize the gamma matrices of batchNormLayers. 
 #'                  Cooljmans et al. recommend 0.1 (for use with tanh activation), mxnet default is 1.
-#'                  My experience: 0.1 works very badly with relu activation.
+#'                  My experience: 0.1 works very poorly with relu activation.
 #' @param batch.size self explanatory
 #' @param activation activation function for update layers in the LSTM cells. "relu" or "tanh"
 #' @param optimizer character specifying the type of optimizer to use.
+#' @param learning.rate learning rate for the optimizer. Can be a single number or a named vector for adaptive learning rate.
+#'                      If it is a vector, the names have to specify the epoch at which this value becomes active. For example
+#'                      \code{learning.rate = c(1=0.004, 30 = 0.002, 50 = 0.0005)} will train epochs 1 to 29 with \code{0.004}, epochs 30 to 49
+#'                      with \code{0.002} and everything after 50 with \code{0.0005}
 #' @param initializer random initializer for weights
 #' @param shuffle    Boolean. Should the training data be reordered randomly prior to training? 
 #'                   (reorders full sequences, order within each sequence is unaffected.)
 #' @param initialModel mxLSTM model. If provided, all weights are initialized based on the given model.
+
 #' @param ... Additional arguments to optimizer
 #' @return object of class mxLSTM: list: a symbol, arg.params, aux.params, a log, and the variable names
 #' @details sequence length is inferred from input (dimension 2).
@@ -49,41 +57,88 @@
 #'\dontrun{
 #' library(mxLSTM)
 #' library(data.table)
-#' 
-#' ## simple data: one numeric output as a function of two numeric inputs.
+#' ## simple data: two numeric outputs as a function of two numeric inputs.
 #' ## including lag values
 #' ## with some noise.
-#' dat <- data.table(x = runif(n = 8000, min = 1000, max = 2000),
-#'                   y = runif(n = 8000, min = -10, max = 10))
+#' nObs <- 20000
+#' dat <- data.table(x = runif(n = nObs, min = 1000, max = 2000),
+#'                   y = runif(n = nObs, min = -10, max = 10))
 #' ## create target
 #' dat[, target := 0.5 * x + 0.7 * lag(y, 3) - 0.2 * lag(x, 5)]
-#' dat[, target := target + rnorm(8000, 0, 10)]
+#' dat[, target2 := 0.1 * x + 0.3 * lag(y, 1) - 0.4 * lag(x, 2)]
+#' dat[, target := target + rnorm(nObs, 0, 10)]
+#' dat[, target2 := target2 + rnorm(nObs, 0, 10)]
+#' 
 #' ## convert to nxLSTM input
-#' dat <- transformLSTMinput(dat = dat, targetColumn = "target", seq.length = 5)
+#' dat <- transformLSTMinput(dat = dat, targetColumn = c("target", "target2"), seq.length = 5)
+#' 
+#' ## split into training and test set
+#' trainIdx <- sample(dim(dat$x)[3], as.integer(dim(dat$x)[3]/2))
+#' testIdx  <- seq_len(dim(dat$x)[3])[-trainIdx]
 #' 
 #' ## train model
-#' model <- mxLSTM(x = dat$x, y = dat$y, num.epoch = 10, num.hidden = 64, 
-#'                 dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE, batch.size = 128)
+#' model <- mxLSTM(x = dat$x[,,trainIdx], 
+#'                 y = dat$y[,,trainIdx], 
+#'                 num.epoch = 50, 
+#'                 num.hidden = 64, 
+#'                 dropoutLstm = 0, 
+#'                 zoneoutLstm = 0.01, 
+#'                 batchNormLstm = TRUE, 
+#'                 batch.size = 128, 
+#'                 optimizer = "rmsprop",
+#'                 learning.rate =  c("1" = 0.005, "20" = 0.002, "40" = 0.0005))
 #' 
 #' ## plot training history
 #' plot_trainHistory(model)
 #' 
-#' ## get some predictions (on training set)
-#' predTrain <- predictLSTMmodel(model = model, dat = dat$x, fullSequence = FALSE)
+#' ## get some predictions (on test set)
+#' predTest <- predictLSTMmodel(model = model, dat = dat$x[,,testIdx], fullSequence = FALSE)
 #' 
 #' ## nice plot
-#' plot_goodnessOfFit(predicted = predTrain$y, observed = dat$y[5,])
+#' plot_goodnessOfFit(predicted = predTest$y1, observed = dat$y[1,5, testIdx])
+#' plot_goodnessOfFit(predicted = predTest$y2, observed = dat$y[2,5, testIdx])
+#' 
+#' ## save the model
+#' ## saveLstmModel(model, "testModel")
 #' }
 
-mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dropoutLstm = num.hidden * 0,
-                   zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, gammaInit = 0.1, batch.size = 128, activation = "relu", optimizer = "rmsprop", 
+mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, 
+                   optimizeFullSequence = FALSE, dropoutLstm = num.hidden * 0,
+                   zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, gammaInit = 1, batch.size = 128, 
+                   activation = "relu", optimizer = "rmsprop", learning.rate = 0.002,
                    initializer = mx.init.Xavier(), shuffle = TRUE, initialModel = NULL, ...){
   
+  ## If we don;t optimize the full sequence, we only need the last sequence element in the 'y' data.
   
-  if(!all(dim(x)[2:3] == dim(y))) stop("x and y don't fit together.")
+  if(!optimizeFullSequence & dim(y)[2] > 1){
+    warning("optimizeFullSequence is switched off. Only the last sequence element in 'y' dimension 2 is used.")
+    y <- y[, dim(y)[2], , drop = FALSE]
+    if(!is.null(test.y)) test.y <- test.y[, dim(test.y)[2], , drop = FALSE]
+  }
+  ## sanity checks for adaptive learningrate
+  if(is.null(names(learning.rate))){
+    if(length(learning.rate) > 1) stop("If a vector of learning.rates is given, it must be named.")
+    names(learning.rate) <-  "1" ## the single value provided learning.rate is valid starting with the first epoch
+  }
+  if(names(learning.rate)[1] != "1") stop("learning.rate must have an entry for epoch 1, e.g. learning.rate = c('1' = 0.002, ...)")
+  if(anyDuplicated(names(learning.rate))) stop("Duplicated entries in names(learning.rate")
+  if(anyNA(as.integer(names(learning.rate)))) stop("names(learning.rate) must be coercible to integer.")
+  ## convert learning.rate to data.table for lookup of epochs
+  learning.rate <- data.table(epoch = as.integer(names(learning.rate)),
+                              lr    = learning.rate, key = "epoch")
+
+  dimTest <- dim(x)[3] == dim(y)[3]
+  if(optimizeFullSequence){
+    dimTest <- dimTest & dim(x)[2] == dim(y)[2]
+  } else{
+    dimTest <- dimTest & dim(y)[2] == 1
+  }
+  if(!dimTest) stop("x and y don't fit together.")
+  
   if(any(dropoutLstm * zoneoutLstm != 0)) stop("dropout and zoneout are mutually exclusive. Please adapt arguments 'dropoutLSTM' or 'zoneoutLSTM")
   
   seq.length <- dim(x)[2]
+  num.outputs <- dim(y)[1]
   
   datTrain <- list(data  = x,
                    label = y)
@@ -104,7 +159,9 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
   
   ## raw symbol
   model <- mxLSTMcreate(seq.length = seq.length, 
+                        num.outputs = num.outputs,
                         num.hidden = num.hidden, 
+                        optimizeFullSequence = optimizeFullSequence,
                         dropoutLstm   = dropoutLstm, 
                         zoneoutLstm   = zoneoutLstm,
                         batchNormLstm = batchNormLstm,
@@ -125,8 +182,10 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
                        symbol     = model, 
                        batchSize  = batch.size,
                        num.hidden = num.hidden,
+                       optimizeFullSequence = optimizeFullSequence,
                        num.rounds = num.epoch, 
                        optimizer  = optimizer, 
+                       learning.rate = learning.rate,
                        initializer =initializer,
                        initialModel=initialModel,
                        shuffle    = shuffle, 
@@ -142,7 +201,7 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
                         aux.params = model$aux.params,
                         log   = thisLoggerEnv$logger,
                         varNames = list(x = dimnames(x)[[1]],          ## remember variable names 
-                                        y = unique(dimnames(y)[[2]]))) ## to order input at prediction
+                                        y = unique(dimnames(y)[[1]]))) ## to order input at prediction
                    , class = "mxLSTM"))
   
 }
@@ -153,7 +212,9 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
 #' @description Creates the basic network.
 #'  consists only of symbols, no binding to values yet.
 #' @param seq.length see \code{\link{mxLSTM}}
+#' @param num.outputs number of final target variables
 #' @param num.hidden see \code{\link{mxLSTM}}
+#' @param optimizeFullSequence see \code{\link{mxLSTM}}
 #' @param dropoutLstm see \code{\link{mxLSTM}}
 #' @param zoneoutLstm see \code{\link{mxLSTM}}
 #' @param batchNormLstm see \code{\link{mxLSTM}}
@@ -161,7 +222,7 @@ mxLSTM <- function(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden, dr
 #' @param activation see \code{\link{mxLSTM}}
 #' @return MXSymbol 
 
-mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE, 
+mxLSTMcreate <- function(seq.length, num.outputs, num.hidden, optimizeFullSequence, dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE, 
                          batch.size = 128, activation = "relu"){
   
   if(any(num.hidden <=0)) stop("num.hidden must consist of positive numbers")
@@ -191,13 +252,19 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 
                                  squeeze_axis = TRUE, ## drop the squuezed axis
                                  name = "data")
   
-  ## target dimensions: 1 = sequence, 2 = batch-size
-  ## target is reshpaed so that targets of all 
-  ## sequences are concatenated to result in a one dimensional matrix with length seq.length * batch.size
-  ## The order of element is as follows: batch1seq1, batch2seq1, ..., batch[batch.size]seq1, batch1seq2, ...
+  ## target dimensions: 1 = target variable, 2 = sequence, 3 = batch-size
+  ## target is reshaped so that targets of all 
+  ## sequences are concatenated to result in a two dimensional matrix with dimensions: 1 = numOutputs, 2 = seq.length * batch.size
+  ## The order of elements in dimension 2 is as follows: batch1seq1, batch2seq1, ..., batch[batch.size]seq1, batch1seq2, ...
   label <- mx.symbol.Variable("label")
-  label <- mx.symbol.transpose(data = label)
-  label <- mx.symbol.Reshape(data = label, shape = batch.size * seq.length)
+  label <- mx.symbol.transpose(data = label, axes = c(2,0,1)) ## careful: axes are numbered from behind
+  if(optimizeFullSequence){
+    seqLengthLabel <- seq.length
+  } else {
+    seqLengthLabel <- 1
+  }
+  label <- mx.symbol.Reshape(data = label, shape = c(num.outputs, batch.size * seqLengthLabel))
+
   
   ## create symbol variables for the memory
   
@@ -264,14 +331,19 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 
   ## the dimension of each sequence element model is:
   ## 1 = num.hidden, 2 = batch size.
   ## There are seq.length elements in the list.
-  ## Now they are concatenated so that the output is two dimensional:
-  ## 1 = num.hidden, 2 = sequence element (seq.length * batch.size elements).
-  ## In dimension 2, the order of element is as follows: batch1seq1, batch2seq1, ..., batch[batch.size]seq1, batch1seq2, ...
-  model <- mx.symbol.concat(data = sequenceModels, 
-                            num.args = seq.length,
-                            dim  = 0, ## mxnet counts dimensions from the back. 0 means: increase the number of columns
-                            name = "model")
-  
+  if(optimizeFullSequence){
+    ## Now they are concatenated so that the output is two dimensional:
+    ## 1 = num.hidden, 2 = sequence element (seq.length * batch.size elements).
+    ## In dimension 2, the order of element is as follows: batch1seq1, batch2seq1, ..., batch[batch.size]seq1, batch1seq2, ...
+    model <- mx.symbol.concat(data = sequenceModels, 
+                              num.args = seq.length,
+                              dim  = 0, ## mxnet counts dimensions from the back. 0 means: increase the number of columns
+                              name = "model")
+  } else { # optimizeFullSequence = FALSE
+    ## just use the last sequence model for modelling. 
+    model <- sequenceModels[[length(sequenceModels)]]
+  }
+    
   ## create fully connected output layer 
   # weights first
   outWeights <- mx.symbol.Variable("out.weight")
@@ -279,7 +351,7 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 
   model <- mx.symbol.FullyConnected(data   = model, 
                                     weight = outWeights, 
                                     bias   = outBias, 
-                                    num.hidden = 1 ## only one output per element for the final prediction
+                                    num.hidden = num.outputs ## number of target variables to be predicted
   )
   
   ## regression output function
@@ -294,20 +366,27 @@ mxLSTMcreate <- function(seq.length, num.hidden, dropoutLstm = 0, zoneoutLstm = 
 #' @description initialize the weights and input matrices with random number to create an executable model
 #' @param model mxSymbol as returned by mxLSTMcreate
 #' @param num.features number of input features.
+#' @param num.outputs number of target variables
 #' @param num.hidden see \code{\link{mxLSTM}}
+#' @param optimizeFullSequence see \code{\link{mxLSTM}}
 #' @param seq.length see \code{\link{mxLSTM}}
 #' @param batch.size see \code{\link{mxLSTM}}
 #' @param initializer see \code{\link{mxLSTM}}
 #' @param initialModel see \code{\link{mxLSTM}}
 #' @param gammaInit    see \code{\link{mxLSTM}}
 #' @return MXExecutor
-mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size, initializer, initialModel = NULL, gammaInit){
+mxLSTMsetup <- function(model, num.features, num.outputs, num.hidden, optimizeFullSequence, seq.length, batch.size, initializer, initialModel = NULL, gammaInit){
   
   ## provide a list with known shapes of input arrays.
   ## This will help to estimate the weight dimensions.
   initShapes <- list()
   initShapes$data <- c(num.features, seq.length, batch.size)
-  initShapes$label <- c(seq.length, batch.size) ## will fail for num.outputs > 1
+  if(optimizeFullSequence){
+    initShapes$label <- c(num.outputs, seq.length, batch.size)
+  } else {
+    initShapes$label <- c(num.outputs, 1, batch.size)
+    
+  }
   
   for(layer in seq_along(num.hidden)){
     
@@ -382,8 +461,6 @@ mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size,
       stop("Initial model does not fit to current settings")
     }
     
-    f <<- function()return(NULL)
-    
     initValues <- list(arg.params = initialModel$arg.params,
                        aux.params = initialModel$aux.params)
   }
@@ -407,13 +484,20 @@ mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size,
 #' @description train the LSTM
 #' @param datTrain list with entries 'data' and 'label'. 
 #'                 'data' is a 3D array of dimension num.features:seq.length:number of observations
-#'                 'label is a 2D array of dimension seq.length:numer of observations
+#'                 'label is a 3D array of dimension num.outputs:seq.length:number of observations
 #' @param datEval similar to datTrain, but for evaluation instead of training.
 #' @param symbol mxSymbol as returned by \code{\link{mxLSTMcreate}}
 #' @param batchSize see \code{\link{mxLSTM}}
 #' @param num.hidden see \code{\link{mxLSTM}}
+#' @param optimizeFullSequence see \code{\link{mxLSTM}}
 #' @param num.rounds see num.epoch argument in \code{\link{mxLSTM}}
 #' @param optimizer see \code{\link{mxLSTM}}
+#' @param learning.rate data.table with two columns: 
+#'                      \itemize{
+#'                         \item{\code{epoch}} (integer) tells from which epoch onwards this learningrate is active. 
+#'                         Has to start with 1
+#'                         \item{\code{lr}} (numeric) the actual value for the learningrate
+#'                      }\code{epoch}
 #' @param initializer see \code{\link{mxLSTM}}
 #' @param initialModel see \code{\link{mxLSTM}}
 #' @param shuffle see \code{\link{mxLSTM}}
@@ -423,17 +507,22 @@ mxLSTMsetup <- function(model, num.features, num.hidden, seq.length, batch.size,
 #' @return  object of class 'mxLSTM' 
 #'        list: 'model' is the actual symbol, 'arg.params' and 'aux.params' are the parameters,
 #'         'log' is the training log, 'optimizerEnv' is an optional environment with optimizer parameters.
-mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds, optimizer = "rmsprop", initializer = mx.init.Xavier(),
+mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, optimizeFullSequence, num.rounds, 
+                        optimizer = "rmsprop", learning.rate = data.table(epoch = 1L, lr = 0.002),
+                        initializer = mx.init.Xavier(),
                         initialModel = NULL, shuffle = TRUE, gammaInit, epoch.end.callback = NULL, ...){
   
   seq.length   <- dim(datTrain$data)[2]
   batch.size   <- batchSize
   num.features <- dim(datTrain$data)[1]
+  num.outputs  <- dim(datTrain$label)[1]
   
   ## executor
   model  <- mxLSTMsetup(model        = symbol, 
                         num.features = num.features, 
+                        num.outputs  = num.outputs,
                         num.hidden   = num.hidden, 
+                        optimizeFullSequence = optimizeFullSequence,
                         seq.length   = seq.length, 
                         batch.size   = batch.size, 
                         initializer  = initializer, 
@@ -442,32 +531,39 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
 
   init.states.name <- grep(".*\\.[ch]$", symbol$arguments, value = TRUE)
   
+  if(!optimizeFullSequence & dim(datTrain$label)[2] > 1){
+    stop("if !optimizeFullSequence, the label must only contain the last element of each sequence in the 2nd dimension.")
+  }
   ## prepare the input data iterators
   trainIterator <- mx.io.arrayiter(datTrain$data, datTrain$label, batch.size, shuffle = shuffle)
   
   if(!is.null(datEval)){
-    
-    evalIterator  <- mx.io.arrayiter(datEval$data, datEval$label, batch.size, shuffle = FALSE)
-    
-  } else {
-    
-    evalIterator <- NULL
+    if(!optimizeFullSequence & dim(datEval$label)[2] > 1){
+      stop("if !optimizeFullSequence, the label of the test data must only contain the last element of each sequence in the 2nd dimension.")
+    }
   }
   
   ## prepare optimizer
-  opt <- mx.opt.create(optimizer, rescale.grad = (1/batch.size), ...)
+  ## learning.rate will be set epoch wise later on.
+  ## to do this, we have to add a dummy learningrate scheduler. 
+  if(is.character(optimizer)){
+    opt <- mx.opt.create(optimizer, rescale.grad = (1/batch.size), lr_scheduler = function(x) return(invisible(NULL)), ...)
+  } else {
+    opt <- optimizer(rescale.grad = (1/batch.size), lr_scheduler = function(x) return(invisible(NULL)), ...)
+  }
   updater <- mx.opt.get.updater(opt, model$ref.arg.arrays)
   
   ## set evaluation metric to RMSE
   metric <- mx.metric.rmse
+
+  ## for resetting the input states
+  init.states.cleared <- 
+    lapply(model$arg.arrays[init.states.name], function(x) return(x * 0))
   
-  for (epoch in 1:num.rounds) {
+  for (thisEpoch in 1:num.rounds) {
     
     ## beginning of an epoch:
     ## Clear input state arrays
-    init.states.cleared <- 
-      lapply(model$arg.arrays[init.states.name], function(x) return(x * 0))
-    
     mx.exec.update.arg.arrays(model, init.states.cleared, match.name = TRUE)
     
     ## reset train iterator to first batch
@@ -476,6 +572,12 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
     ## initialize train metric for this epoch
     train.metric <- metric$init()  
     
+    ## set the correct learning.rate for this epoch.
+    newLr <- learning.rate[epoch == thisEpoch]$lr
+    if(length(newLr)){
+      ## only update if there is a match for the epoch
+      assign(x = "lr", value = newLr, envir = get("rmsprop", environment(opt$update)))
+    }
     while (trainIterator$iter.next()) {
       
       ## beginning of training batch
@@ -506,67 +608,68 @@ mxLSTMtrain <- function(datTrain, datEval, symbol, batchSize, num.hidden, num.ro
       
       ## update the train metric.
       ## Only use the last value of each sequence
+      referenceData <-
+        data$label
+      if(optimizeFullSequence){
+        referenceData <- 
+          referenceData %>% 
+          mx.nd.slice.axis(axis = 1, begin = seq.length - 1, end = seq.length)
+      }
+      referenceData <-
+        referenceData %>% 
+        mx.nd.flatten
+      
+      modelOutput <- 
+        model$ref.outputs$lstm_output
+      if(optimizeFullSequence){
+        modelOutput <- 
+          modelOutput %>% 
+          mx.nd.take(indices = (seq.length - 1) * batch.size + (0 : (batch.size - 1)) %>% mx.nd.array())
+      }
+        
       train.metric <- 
-        metric$update(label = data$label %>% 
-                        mx.nd.choose.element.0index(rhs = rep(seq.length - 1, 
-                                                              batch.size) %>% mx.nd.array()),
-                      pred  = model$ref.outputs$lstm_output %>% ## will fail with num.output > 1 
-                        mx.nd.take(indices = (seq.length - 1) * batch.size + (0 : (batch.size - 1)) %>% 
-                                     mx.nd.array()),
+        metric$update(label = referenceData,
+                      pred  = modelOutput,
                       state = train.metric)
       
     }
-    
     ## start evaluation
-    if(!is.null(evalIterator)){
-      
-      ## reset eval iterator to first batch
-      evalIterator$reset()
-      
-      ## initialize evaluation metric for this epoch
-      eval.metric <- metric$init()
-      
-      while (evalIterator$iter.next()) {
-        
-        ## beginning of evaluation batch
-        ## set input data
-        data <- evalIterator$value()
-        mx.exec.update.arg.arrays(model, data, 
-                                  match.name = TRUE)
-        
-        ## forward pass
-        mx.exec.forward(model, is.train = FALSE)
-        
-        ## update the evaluation metric (only use the last prediction of each sequence)
-        eval.metric <- 
-          metric$update(label = data$label %>% 
-                          mx.nd.choose.element.0index(rhs = rep(seq.length - 1, 
-                                                                batch.size) %>% mx.nd.array()),
-                        pred  = model$ref.outputs$lstm_output %>% ## will fail with num.output > 1 
-                          mx.nd.take(indices = (seq.length - 1) * batch.size + (0 : (batch.size - 1)) %>% 
-                                       mx.nd.array()),
-                        state = eval.metric)
-        
-        ## clear input state arrays after update
-        mx.exec.update.arg.arrays(model, init.states.cleared, match.name = TRUE)
-        
+    if(!is.null(datEval)){
+      ## get correct model structure for predictLSTMmodel
+      evalModel <- structure(list(symbol = symbol,
+                     arg.params = model$arg.arrays,
+                     aux.params = model$aux.arrays,
+                     varNames = list(x = dimnames(datEval$data)[[1]],
+                                     y = unique(dimnames(datEval$label)[[1]]))),
+                     class = "mxLSTM")
+      ## only use last element in each sequence
+      modelOutput <-
+        predictLSTMmodel(model = evalModel, dat = datEval$data, fullSequence = FALSE) %>%
+        .[, -length(.)] %>% ## remove the rowIndex column
+        t %>%
+        mx.nd.array()
+      referenceData <-
+        datEval$label
+      if(optimizeFullSequence){
+        referenceData <- referenceData[, seq.length, ]
+      } else {
+        referenceData <- referenceData[, 1, ]
       }
+      referenceData <- mx.nd.array(referenceData)
+      eval.metric <- metric$init()
+      eval.metric <-
+        metric$update(label = referenceData,
+                      pred  = modelOutput,
+                      state = eval.metric)
     }
-    
-    
     ## epoch end callback here
     continue <- TRUE
     if(!is.null(epoch.end.callback)){
-      
-      continue <- epoch.end.callback(epoch, 0, environment())
+      continue <- epoch.end.callback(thisEpoch, 0, environment())
     }
-    
     if(!continue) break
-    
   }
-  
   return(list(symbol = symbol, arg.params = model$arg.arrays, aux.params = model$aux.arrays))
-  
 }
 
 #' @title lstmCell

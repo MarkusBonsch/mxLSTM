@@ -47,7 +47,8 @@ Differences when using it in \code{\link[caret]{train}}:
                                                 for scaling as a last preProcessing step. \code{preProcessY} can include
                                                 \code{c('scale', 'center', 'minMax')}.}}}
                                                 
-\item{Additional mandatory arguments to fit function} {For transforming the input to the LSTM, the following additional arguments must be specified to the train function:
+\item{Additional mandatory arguments to fit function} {For transforming the input to the LSTM, the following additional arguments 
+                                      must be specified to the train function:
                                       \itemize{
                                            \item{\code{seqLength}: The sequence length (number of rows in input)}
                                            \item{\code{seqFreq}: frequency of sequence starts (in rows). 
@@ -91,9 +92,7 @@ Differences when using it in \code{\link[caret]{train}}:
                          \item{activation}{ Activation function for the update layers in the LSTM cells. "relu" or "tanh"}
                          \item{shuffle}{ Boolean. Should the training batches be randomly reordered? 
                                Each sequence of course stays in its native order}
-                         \item{learning_rate:} { defaults to 0.002}
                          \item{weight_decay:} { defaults to 0}
-                         \item{dropout:}{ [0;1] fraction of neurons that are randomly discarded in each hidden layer during training. Default: 0}
                          \item{learningrate_momentum:} { gamma1. See API description of mx.opt.rmsprop}
                          \item{momentum:} { gamma2. See API description of mx.opt.rmsprop.}
                          \item{clip_gradients:} { See API description of mx.opt.rmsprop}
@@ -105,16 +104,15 @@ Differences when using it in \code{\link[caret]{train}}:
     \item{\strong{plot training history}} {It is possible to plot the training history
       of an mxLSTM model with \code{\link{plot_trainHistory}}}
     \item{\strong{restore checkpoint from specified epoch}}{ It is possible to restore
-     the model weights after a given epoch with the function \code{\link{restoreLSTMcheckpoint}}.}
+     the model weights after a given epoch with the function \code{\link{restoreLstmCheckpoint}}.}
       
   }
 }
 \examples{
 \dontrun{
-library(caret)
 library(mxLSTM)
-library(mxnet)
 library(data.table)
+library(caret)
 ###########################################################
 ## perform a regression with nxLSTM
 ## on dummy data
@@ -124,24 +122,28 @@ library(data.table)
 ## with some noise.
 set.seed(200)
 mx.set.seed(200)
-dat <- data.table(x = runif(n = 8000, min = 1000, max = 2000),
-                  y = runif(n = 8000, min = -10, max = 10))
+nObs <- 20000
+dat <- data.table(x = runif(n = nObs, min = 1000, max = 2000),
+                  y = runif(n = nObs, min = -10, max = 10))
 ## create target
 dat[, target := 0.5 * x + 0.7 * lag(y, 3) - 0.2 * lag(x, 5)]
-
-dat[, target := target + rnorm(8000, 0, 10)]
-
+dat[, target2 := 0.1 * x + 0.3 * lag(y, 1) - 0.4 * lag(x, 2)]
+dat[, target := target + rnorm(nObs, 0, 10)]
+dat[, target2 := target2 + rnorm(nObs, 0, 10)]
 
 ## convert to nxLSTM input
-dat <- transformLSTMinput(dat = dat, targetColumn = "target", seq.length = 5)
+dat <- transformLSTMinput(dat = dat, targetColumn = c("target", "target2"), seq.length = 5)
 
 ## convert to caret input
 dat <- lstmInput2caret(dat)
 
 ## split into train and test set
-datTrain <- dat[1:666,]
-datEval  <- dat[667:1334,]
-datTest  <- dat[1335:1600,]
+trainIdx <- sample(seq_len(nrow(dat)), as.integer(nrow(dat) / 3))
+evalIdx  <- sample(seq_len(nrow(dat))[-trainIdx], as.integer(nrow(dat) / 3))
+testIdx  <- seq_len(nrow(dat))[-c(trainIdx, evalIdx)]
+datTrain <- dat[trainIdx,]
+datEval  <- dat[evalIdx,]
+datTest  <- dat[testIdx,]
 
 ## define caret trainControl
 thisTrainControl  <- trainControl(method = "cv",
@@ -153,61 +155,45 @@ thisTrainControl  <- trainControl(method = "cv",
 
 ## grid for defining the parameters of the mxNet model
 lstmGrid <- expand.grid(layer1 = 64, layer2 = 0, layer3 = 0,
-                        learning.rate = 0.002, weight.decay = 0, dropout1 = 0, dropout2 = 0, dropout3 = 0,
+                        weight.decay = 0, dropout1 = 0, dropout2 = 0, dropout3 = 0,
                         learningrate.momentum = 0.95,
                         momentum = 0.1, num.epoch = 50,
                         batch.size = 128, activation = "relu", shuffle = TRUE, stringsAsFactors = FALSE)
 
 ## construct formula with all variables on rigth-hand-side
-form <- formula(paste0("dummy~", paste0(setdiff(names(train), "dummy"), collapse = "+")))
+form <- formula(paste0("dummy~", paste0(setdiff(names(datTrain), "dummy"), collapse = "+")))
 
-caret_lstm1 <- train(form = form,
-                     data = datTrain,
-                     testData = datEval,
-                     method = getLSTMmodel(), ## get our custom model
-                     xVariables = c("x", "y"), ## define predictors
-                     yVariables = c("target"), ## define outcomes
-                     preProcessX = c("pca", "scaleAgain", "centerAgain"),
-                     preProcessY = c("scale", "center"),
-                     debugModel = FALSE,
-                     trControl = thisTrainControl,
-                     tuneGrid = lstmGrid)
-
-caret_lstm2 <- train(form = form,
-                     data = datTrain,
-                     testData = datEval,
-                     method = getLSTMmodel(), ## get our custom model
-                     xVariables = c("x", "y"), ## define predictors
-                     yVariables = c("target"), ## define outcomes
-                     preProcessX = c("pca", "scaleAgain", "centerAgain"),
-                     preProcessY = c("scale", "center"),
-                     debugModel = FALSE,
-                     trControl = thisTrainControl,
-                     tuneGrid = lstmGrid,
-                     batchNormLstm = TRUE,
-                     zoneoutLstm = 0.2)
+caret_lstm <- train(form = form,
+                    data = datTrain,
+                    testData = datEval,
+                    method = getLSTMmodel(), ## get our custom model
+                    xVariables = c("x", "y"), ## define predictors
+                    yVariables = c("target", "target2"), ## define outcomes
+                    preProcessX = c("pca", "scaleAgain", "centerAgain"),
+                    preProcessY = c("scale", "center"), ## in case of multiple y, this makes sense imho
+                    debugModel = FALSE,
+                    trControl = thisTrainControl,
+                    tuneGrid = lstmGrid,
+                    learning.rate = c("1" = 0.02, "40" = 0.0002), ## adaptive learningrate that changes at epoch 40
+                    optimizeFullSequence = FALSE
+)
 
 ## get nice output of training history
-plot_trainHistory(caret_lstm1$finalModel)
-plot_trainHistory(caret_lstm2$finalModel)
+plot_trainHistory(caret_lstm$finalModel)
 
 ## get predictions for the datasets
-predTrain1 <- predictAll(caret_lstm1, newdata = datTrain, fullSequence = FALSE)
-predEval1  <- predictAll(caret_lstm1, newdata = datEval, fullSequence = FALSE)
-predTest1  <- predictAll(caret_lstm1, newdata = datTest, fullSequence = FALSE)
-
-predTrain2 <- predictAll(caret_lstm1, newdata = datTrain, fullSequence = FALSE)
-predEval2  <- predictAll(caret_lstm2, newdata = datEval, fullSequence = FALSE)
-predTest2  <- predictAll(caret_lstm2, newdata = datTest, fullSequence = FALSE)
+predTrain <- predictAll(caret_lstm, newdata = datTrain, fullSequence = FALSE)
+predEval  <- predictAll(caret_lstm, newdata = datEval, fullSequence = FALSE)
+predTest  <- predictAll(caret_lstm, newdata = datTest, fullSequence = FALSE)
 
 ## get nice goodness of fit plots.
-plot_goodnessOfFit(predicted = predTrain1$target, observed = datTrain$dummy)
-plot_goodnessOfFit(predicted = predEval1$target,  observed = datEval$dummy)
-plot_goodnessOfFit(predicted = predTest1$target,  observed = datTest$dummy)
+plot_goodnessOfFit(predicted = predTrain$target, observed = datTrain$target_seq5Y)
+plot_goodnessOfFit(predicted = predTrain$target2, observed = datTrain$target2_seq5Y)
+plot_goodnessOfFit(predicted = predTest$target, observed = datTest$target_seq5Y)
+plot_goodnessOfFit(predicted = predTest$target2, observed = datTest$target2_seq5Y)
 
-plot_goodnessOfFit(predicted = predTrain2$target, observed = datTrain$dummy)
-plot_goodnessOfFit(predicted = predEval2$target,  observed = datEval$dummy)
-plot_goodnessOfFit(predicted = predTest2$target,  observed = datTest$dummy)
+## save the model
+saveCaretLstmModel(caret_lstm, "testModel")
 }
 }
 \seealso{

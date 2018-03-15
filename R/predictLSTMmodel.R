@@ -3,7 +3,9 @@
 #' @param model LSTM model as returned by \code{\link{mxLSTM}} or \code{\link{fitLSTMmodel}}
 #' @param dat input data as provided by \code{\link{transformLSTMinput}} in the 'x' element of the list.
 #' @param fullSequence Boolean. If FALSE, only the last predicted element of a sequence is returned.
-#'                              If TRUE, a prediction for each step in the sequence is returned.            
+#'                              If TRUE, a prediction for each step in the sequence is returned.
+#'                              If the model was trained with optimizeFullSequence = FALSE, 
+#'                              this will be set to FALSE with a warning.
 #' @return data.frame with predictions.
 #' @details the sequence length is inferred from the \code{model} argument.
 #' @seealso \code{\link{mxLSTM}}, \code{\link{fitLSTMmodel}}, \code{\link{getLSTMmodel}}
@@ -17,7 +19,15 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
   }
   
   seq.len    <- dim(model$arg.params$data)[2]
-  
+  ## check whether optimizeFullSequence was switched off. 
+  ## If so, fullSequence argument for prediction doesn't make sense
+  optimizeFullSequence <- seq.len > 1 & dim(model$arg.params$label)[2] == seq.len
+  if(!optimizeFullSequence){
+    if(fullSequence){
+      warning("fullSequence turned off because model was trained without full sequence support")
+    }
+  }
+
   if(dim(dat)[2] != seq.len) stop("Prediction data has a wrong sequence length")
   
   ## create executor from input symbol and parameters
@@ -33,12 +43,12 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
     lapply(model$arg.params[init.states.name], function(x) return(x * 0))
   
   ## get correct order of variables
-  dat <- dat[model$varNames$x,,]
+  dat <- dat[model$varNames$x,,, drop = FALSE]
   
   batch.size <- dim(model$arg.params$data)[3]  
   
   ## create dummy y variables as placeholder
-  y <- array(0, dim = dim(dat)[2:3])
+  y <- array(0, dim = dim(dat))
 
   ## create the iterator over batches
   input <- mx.io.arrayiter(data    = dat, 
@@ -73,7 +83,7 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
     
     padded <- input$num.pad()
     
-    if(fullSequence){
+    if(fullSequence & optimizeFullSequence){
       ## reorder the output so that it is elem1[seq1], elem1[seq2], ..., elem1[seqN], elem2[seq1],,,
       ## that makes it time-ordered, as the original label should be
       ## if the last batch is not fully filled, outputs from previous batch are repeated..
@@ -81,10 +91,10 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
       ## remove those from the output. Be careful: the output is ordered as follows: 
       ## elem1seq1, elem2seq1, ..., elemNseq1, ..., elemNseq2, ..., elemNseqN
       timeOrderIndices <- integer(0)
-      for(seq in seq_len(batch.size - padded)){
+      for(s in seq_len(batch.size - padded)){
         timeOrderIndices <-
           c(timeOrderIndices,
-            seq(seq - 1,
+            seq(s - 1,
                 seq.len * batch.size- 1,
                 by = batch.size
                 )
@@ -95,7 +105,7 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
 
       out.pred <- mx.nd.take(a = out.pred, indices = timeOrderIndices, mode = "clip") # mode = "raise" would be preferred but does not work anymore.
       
-    } else { # fullSequence == FALSE
+    } else if(optimizeFullSequence) { # fullSequence == FALSE
       
       ## if fullSequence is FALSE, select the last element of each sequence
       lastElementIndices <- 
@@ -104,6 +114,11 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
       
       out.pred <- mx.nd.take(a = out.pred, indices = lastElementIndices, mode = "clip") # mode = "raise" would be preferred but does not work anymore.
     
+    } else {## else optimizeFullSequence is FALSE
+      ## only do something if padded
+      if(padded > 0){
+        out.pred <- mx.nd.take(a = out.pred, indices = mx.nd.array(seq_len(batch.size - padded) - 1), mode = "clip")
+      }
     }
     
     packer$push(out.pred)
@@ -116,7 +131,7 @@ predictLSTMmodel <- function(model, dat, fullSequence = TRUE){
     packer$get() %>% 
     t %>% 
     data.table %>% 
-    setnames("y")
+    setnames(if(length(.) > 1) paste0("y", seq_along(.)) else "y")
   
   
   ## get an index of row numbers
