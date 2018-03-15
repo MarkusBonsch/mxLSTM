@@ -8,11 +8,11 @@
 \title{mxLSTM: A library facilitating regression analysis with LSTMs}
 \usage{
 mxLSTM(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden,
-  dropoutLstm = num.hidden * 0, zoneoutLstm = num.hidden * 0,
-  batchNormLstm = FALSE, gammaInit = 1, batch.size = 128,
-  activation = "relu", optimizer = "rmsprop", learning.rate = 0.002,
-  initializer = mx.init.Xavier(), shuffle = TRUE, initialModel = NULL,
-  ...)
+  optimizeFullSequence = FALSE, dropoutLstm = num.hidden * 0,
+  zoneoutLstm = num.hidden * 0, batchNormLstm = FALSE, gammaInit = 1,
+  batch.size = 128, activation = "relu", optimizer = "rmsprop",
+  learning.rate = 0.002, initializer = mx.init.Xavier(), shuffle = TRUE,
+  initialModel = NULL, ...)
 }
 \arguments{
 \item{x}{array containing the features:
@@ -39,6 +39,10 @@ mxLSTM(x, y, num.epoch, test.x = NULL, test.y = NULL, num.hidden,
 
 \item{num.hidden}{integer vector of flexible length. For each entry, an LSTM layer with the corresponding number of
 neurons is created.}
+
+\item{optimizeFullSequence}{Boolean. If TRUE, each sequence element is in the output and adds to the loss.
+If FALSE (default), only the last element of each sequence will be used to optimize the model and 
+the outputs of the rest of the sequence are not available in the output.}
 
 \item{dropoutLstm}{numeric vector of same length as num.hidden. Specifies the dropout probability for each LSTM layer.
 Dropout is applied according to Cheng et al. "An exploration of dropout with LSTMs". 

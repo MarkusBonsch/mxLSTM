@@ -5,8 +5,9 @@
 \title{mxLSTMtrain
 #' @param model mxSymbol as returned by mxLSTMcreate}
 \usage{
-mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds,
-  optimizer = "rmsprop", learning.rate = data.table(epoch = 1L, lr = 0.002),
+mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden,
+  optimizeFullSequence, num.rounds, optimizer = "rmsprop",
+  learning.rate = data.table(epoch = 1L, lr = 0.002),
   initializer = mx.init.Xavier(), initialModel = NULL, shuffle = TRUE,
   gammaInit, epoch.end.callback = NULL, ...)
 }
@@ -22,6 +23,8 @@ mxLSTMtrain(datTrain, datEval, symbol, batchSize, num.hidden, num.rounds,
 \item{batchSize}{see \code{\link{mxLSTM}}}
 
 \item{num.hidden}{see \code{\link{mxLSTM}}}
+
+\item{optimizeFullSequence}{see \code{\link{mxLSTM}}}
 
 \item{num.rounds}{see num.epoch argument in \code{\link{mxLSTM}}}
 

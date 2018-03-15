@@ -169,7 +169,8 @@
 #'                     debugModel = FALSE,
 #'                     trControl = thisTrainControl,
 #'                     tuneGrid = lstmGrid,
-#'                     learning.rate = c("1" = 0.02, "40" = 0.0002) ## adaptive learningrate that changes at epoch 40
+#'                     learning.rate = c("1" = 0.02, "40" = 0.0002), ## adaptive learningrate that changes at epoch 40
+#'                     optimizeFullSequence = FALSE
 #' )
 #' 
 #' ## get nice output of training history

@@ -4,9 +4,9 @@
 \alias{mxLSTMcreate}
 \title{mxLSTMcreate}
 \usage{
-mxLSTMcreate(seq.length, num.outputs, num.hidden, dropoutLstm = 0,
-  zoneoutLstm = 0, batchNormLstm = FALSE, batch.size = 128,
-  activation = "relu")
+mxLSTMcreate(seq.length, num.outputs, num.hidden, optimizeFullSequence,
+  dropoutLstm = 0, zoneoutLstm = 0, batchNormLstm = FALSE,
+  batch.size = 128, activation = "relu")
 }
 \arguments{
 \item{seq.length}{see \code{\link{mxLSTM}}}
@@ -14,6 +14,8 @@ mxLSTMcreate(seq.length, num.outputs, num.hidden, dropoutLstm = 0,
 \item{num.outputs}{number of final target variables}
 
 \item{num.hidden}{see \code{\link{mxLSTM}}}
+
+\item{optimizeFullSequence}{see \code{\link{mxLSTM}}}
 
 \item{dropoutLstm}{see \code{\link{mxLSTM}}}
 

@@ -32,7 +32,7 @@ fitLSTMmodel <- function(x, y, param, test.x = NULL, test.y = NULL, initialModel
   if(is.data.table(test.y)) test.y <- as.data.frame(test.y)
   
     xVariables <- dimnames(x)[[1]]
-    yVariables <- unique(dimnames(y)[[2]])
+    yVariables <- unique(dimnames(y)[[1]])
     
     ## convert tuning parameters for hidden neurons and dropout to inputs for mxLSTM
     num.hidden  <- c("1" = param$layer1, "2" = param$layer2, "3" = param$layer3)
